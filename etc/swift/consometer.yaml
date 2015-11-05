@@ -1,0 +1,5 @@
+credentials:
+    - keystone_uri: "http://identity.fr1.cloudwatt.com:5000"
+    - swift_conso_tenant: "conso"
+    - swift_conso_user: "swift-consometer"
+    - swift_conso_password: "yolo"
