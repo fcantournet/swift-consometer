@@ -32,10 +32,10 @@ func buildAuthOptions() (gophercloud.AuthOptions, error) {
 func main() {
 
 	viper.SetConfigType("yaml")
-	viper.SetConfigName("consometer")                                        // name of config file (without extension)
-	viper.AddConfigPath("/home/felix/gbprojects/swift-consometer/etc/swift") // path to look for the config file in
-	err := viper.ReadInConfig()                                              // Find and read the config file
-	if err != nil {                                                          // Handle errors reading the config file
+	viper.SetConfigName("consometer")  // name of config file (without extension)
+	viper.AddConfigPath("./etc/swift") // path to look for the config file in
+	err := viper.ReadInConfig()        // Find and read the config file
+	if err != nil {                    // Handle errors reading the config file
 		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
 
