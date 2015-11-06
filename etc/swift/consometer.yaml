@@ -3,3 +3,4 @@ credentials:
   swift_conso_tenant: "conso"
   swift_conso_user: "swift-consometer"
   swift_conso_password: "yolo"
+os_region_name: "fr1"
