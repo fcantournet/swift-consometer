@@ -36,20 +36,18 @@ func buildAuthOptions() (gophercloud.AuthOptions, error) {
 }
 */
 
-func getTenants(client *gophercloud.ServiceClient) {
+func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
+	var list []tenants.Tenant
 	pager := tenants.List(client, nil)
-	err := pager.EachPage(func(page pagination.Page) (bool, error) {
+	pager.EachPage(func(page pagination.Page) (bool, error) {
 		tenantList, err := tenants.ExtractTenants(page)
-
-		for _, t := range tenantList {
-			// "t" will be a tenants.Tenant
-			fmt.Println(t)
+		list = append(tenantList)
+		if err != nil {
+			panic(fmt.Errorf("Error processing pager: %s \n", err))
 		}
-		return true, err
+		return true, nil
 	})
-	if err != nil {
-		panic(fmt.Errorf("Error processing pager: %s \n", err))
-	}
+	return list
 }
 
 func main() {
@@ -83,6 +81,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("Fatal failed to create identity client : %s \n", err))
 	}
-	getTenants(idClient)
+	tenantlist := getTenants(idClient)
+	fmt.Println(tenantlist)
 	return
 }
