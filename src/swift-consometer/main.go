@@ -8,6 +8,7 @@ import (
 	"github.com/rackspace/gophercloud/openstack/identity/v2/tenants"
 	"github.com/rackspace/gophercloud/pagination"
 	"github.com/spf13/viper"
+	"strings"
 )
 
 /*
@@ -20,7 +21,6 @@ type credentials struct {
 
 func buildAuthOptions() (gophercloud.AuthOptions, error) {
 	var creds credentials
-	fmt.Println(viper.AllSettings())
 	if err := viper.UnmarshalKey("credentials", &creds); err != nil {
 		//return gophercloud.AuthOptions{}, err
 		panic(fmt.Errorf("Unable to decode into struct, %s \n", err))
@@ -60,6 +60,7 @@ func main() {
 	if err != nil {                   // Handle errors reading the config file
 		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
+	regionName := viper.GetString("os_region_name")
 
 	//	opts, err := buildAuthOptions()
 	opts := gophercloud.AuthOptions{
@@ -81,7 +82,15 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("Fatal failed to create identity client : %s \n", err))
 	}
-	tenantlist := getTenants(idClient)
-	fmt.Println(tenantlist)
+	tenantList := getTenants(idClient)
+	objectStoreURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{Type: "object-store", Region: regionName, Availability: gophercloud.AvailabilityAdmin})
+	if err != nil {
+		panic(fmt.Errorf("Fatal failed to retrieve object store admin url : %s \n", err))
+	}
+	for _, tenant := range tenantList {
+		accountsURL := strings.Join([]string{objectStoreURL, "v1/AUTH_", tenant.ID}, "")
+		resp, _ := provider.Request("GET", accountsURL, gophercloud.RequestOpts{OkCodes: []int{200}})
+		fmt.Println(resp)
+	}
 	return
 }
