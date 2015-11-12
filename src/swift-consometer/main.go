@@ -25,7 +25,7 @@ func buildAuthOptions() (gophercloud.AuthOptions, error) {
 	var creds credentials
 	if err := viper.UnmarshalKey("credentials", &creds); err != nil {
 		//return gophercloud.AuthOptions{}, err
-		log.Fatal("Unable to decode into struct, %s \n", err)
+		log.Fatal("Unable to decode into struct: ", err)
 	}
 
 	ao := gophercloud.AuthOptions{
@@ -45,7 +45,7 @@ func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
 		tenantList, err := tenants.ExtractTenants(page)
 		list = append(tenantList)
 		if err != nil {
-			log.Fatal("Error processing pager: %s \n", err)
+			log.Fatal("Error processing pager: ", err)
 		}
 		return true, nil
 	})
@@ -53,9 +53,6 @@ func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
 }
 
 func init() {
-	// Log as JSON instead of the default ASCII formatter.
-	log.SetFormatter(&log.JSONFormatter{})
-
 	// Output to stderr instead of stdout, could also be a file.
 	log.SetOutput(os.Stderr)
 
@@ -71,7 +68,7 @@ func main() {
 	viper.AddConfigPath(*ConfigPath)  // path to look for the config file in
 	err := viper.ReadInConfig()       // Find and read the config file
 	if err != nil {                   // Handle errors reading the config file
-		log.Fatal("Error reading config file: %s", err)
+		log.Fatal("Error reading config file: ", err)
 	}
 	regionName := viper.GetString("os_region_name")
 
@@ -85,7 +82,7 @@ func main() {
 
 	provider, err := openstack.AuthenticatedClient(opts)
 	if err != nil {
-		log.Fatal("Error creating provider : %s", err)
+		log.Fatal("Error creating provider: ", err)
 	}
 
 	idClient := openstack.NewIdentityV2(provider)
@@ -93,7 +90,7 @@ func main() {
 
 	objectStoreURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{Type: "object-store", Region: regionName, Availability: gophercloud.AvailabilityAdmin})
 	if err != nil {
-		log.Fatal("Error retrieving object store admin url : %s", err)
+		log.Fatal("Error retrieving object store admin url: ", err)
 	}
 
 	for _, tenant := range tenantList {
