@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+var log = logrus.New()
+
 /*
 type credentials struct {
 	KeystoneURI        string
@@ -36,21 +38,23 @@ func buildAuthOptions() (gophercloud.AuthOptions, error) {
 }
 */
 
+func failOnError(msg string, err error) {
+	if err != nil {
+		log.Fatal(msg, err)
+	}
+}
+
 func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
 	var list []tenants.Tenant
 	pager := tenants.List(client, nil)
 	pager.EachPage(func(page pagination.Page) (bool, error) {
 		tenantList, err := tenants.ExtractTenants(page)
 		list = append(tenantList)
-		if err != nil {
-			log.Fatal("Error processing pager: ", err)
-		}
+		failOnError("Error processing pager: ", err)
 		return true, nil
 	})
 	return list
 }
-
-var log = logrus.New()
 
 func main() {
 	ConfigPath := flag.String("config", "./etc/swift", "Path of the configuration file directory.")
@@ -61,12 +65,10 @@ func main() {
 	}
 
 	viper.SetConfigType("yaml")
-	viper.SetConfigName("consometer") // name of config file (without extension)
-	viper.AddConfigPath(*ConfigPath)  // path to look for the config file in
-	err := viper.ReadInConfig()       // Find and read the config file
-	if err != nil {                   // Handle errors reading the config file
-		log.Fatal("Error reading config file: ", err)
-	}
+	viper.SetConfigName("consometer")               // name of config file (without extension)
+	viper.AddConfigPath(*ConfigPath)                // path to look for the config file in
+	err := viper.ReadInConfig()                     // Find and read the config files
+	failOnError("Error reading config file: ", err) // Handle errors reading the config file
 	log.Debug("Config used: \n", viper.AllSettings())
 
 	regionName := viper.GetString("os_region_name")
@@ -79,17 +81,13 @@ func main() {
 	}
 
 	provider, err := openstack.AuthenticatedClient(opts)
-	if err != nil {
-		log.Fatal("Error creating provider: ", err)
-	}
+	failOnError("Error creating provider: ", err)
 
 	idClient := openstack.NewIdentityV2(provider)
 	tenantList := getTenants(idClient)
 
 	objectStoreURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{Type: "object-store", Region: regionName, Availability: gophercloud.AvailabilityAdmin})
-	if err != nil {
-		log.Fatal("Error retrieving object store admin url: ", err)
-	}
+	failOnError("Error retrieving object store admin url: ", err)
 	log.Debug("object store url: ", objectStoreURL)
 
 	for _, tenant := range tenantList {
