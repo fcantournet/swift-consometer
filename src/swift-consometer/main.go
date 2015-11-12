@@ -2,14 +2,12 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/rackspace/gophercloud"
 	"github.com/rackspace/gophercloud/openstack"
 	"github.com/rackspace/gophercloud/openstack/identity/v2/tenants"
 	"github.com/rackspace/gophercloud/pagination"
 	"github.com/spf13/viper"
-	"os"
 	"strings"
 )
 
@@ -52,17 +50,16 @@ func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
 	return list
 }
 
-func init() {
-	// Output to stderr instead of stdout, could also be a file.
-	log.SetOutput(os.Stderr)
-
-	// Only log the warning severity or above.
-	log.SetLevel(log.WarnLevel)
-}
+var log = logrus.New()
 
 func main() {
 	ConfigPath := flag.String("config", "./etc/swift", "Path of the configuration file directory.")
+	logLevel := flag.Bool("debug", false, "Set log level to debug.")
 	flag.Parse()
+	if *logLevel {
+		log.Level = logrus.DebugLevel
+	}
+
 	viper.SetConfigType("yaml")
 	viper.SetConfigName("consometer") // name of config file (without extension)
 	viper.AddConfigPath(*ConfigPath)  // path to look for the config file in
@@ -70,8 +67,9 @@ func main() {
 	if err != nil {                   // Handle errors reading the config file
 		log.Fatal("Error reading config file: ", err)
 	}
-	regionName := viper.GetString("os_region_name")
+	log.Debug("Config used: \n", viper.AllSettings())
 
+	regionName := viper.GetString("os_region_name")
 	//	opts, err := buildAuthOptions()
 	opts := gophercloud.AuthOptions{
 		IdentityEndpoint: viper.GetString("credentials.keystone_uri"),
@@ -92,11 +90,12 @@ func main() {
 	if err != nil {
 		log.Fatal("Error retrieving object store admin url: ", err)
 	}
+	log.Debug("object store url: ", objectStoreURL)
 
 	for _, tenant := range tenantList {
 		accountsURL := strings.Join([]string{objectStoreURL, "v1/AUTH_", tenant.ID}, "")
 		resp, _ := provider.Request("GET", accountsURL, gophercloud.RequestOpts{OkCodes: []int{200}})
-		fmt.Println(resp)
+		log.Debug(resp)
 	}
 
 	return
