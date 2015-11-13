@@ -8,7 +8,9 @@ import (
 	"github.com/rackspace/gophercloud/openstack/identity/v2/tenants"
 	"github.com/rackspace/gophercloud/pagination"
 	"github.com/spf13/viper"
+	"net/http"
 	"strings"
+	"sync"
 )
 
 var log = logrus.New()
@@ -50,26 +52,62 @@ func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
 	pager.EachPage(func(page pagination.Page) (bool, error) {
 		tenantList, err := tenants.ExtractTenants(page)
 		list = append(tenantList)
-		failOnError("Error processing pager: ", err)
+		failOnError("Error processing pager:\n", err)
 		return true, nil
 	})
 	return list
 }
 
+/*
+type accountInfo struct {
+	counter_name      string //"storage.objects.size",
+	resource_id       string //"d5bbc7c06c9e479dbb91912c045cdeab",
+	message_id        string //"1",
+	timestamp         string // "2013-05-13T14:03:01Z",
+	counter_volume    string // "0",
+	user_id           string // null,
+	source            string // "openstack",
+	counter_unit      string // "B",
+	project_id        string // "d5bbc7c06c9e479dbb91912c045cdeab",
+	counter_type      string // "gauge",
+	resource_metadata string // null
+}
+*/
+
+func worker(id int, jobs <-chan string, results chan<- *http.Response, wg sync.WaitGroup, provider *gophercloud.ProviderClient) {
+	for {
+		defer wg.Done()
+		job := <-jobs
+		resp, _ := provider.Request("GET", job, gophercloud.RequestOpts{OkCodes: []int{200}})
+		log.Debug("worker", id, ":\n", resp)
+		results <- resp
+	}
+}
+
+func sliceMaker(results <-chan *http.Response) []*http.Response {
+	var s []*http.Response
+	for range results {
+		result := <-results
+		s = append(s, result)
+	}
+	return s
+}
+
 func main() {
 	ConfigPath := flag.String("config", "./etc/swift", "Path of the configuration file directory.")
 	logLevel := flag.Bool("debug", false, "Set log level to debug.")
+	workerNumber := flag.Int("n", 3, "Number of goroutines to launch.")
 	flag.Parse()
 	if *logLevel {
 		log.Level = logrus.DebugLevel
 	}
 
 	viper.SetConfigType("yaml")
-	viper.SetConfigName("consometer")               // name of config file (without extension)
-	viper.AddConfigPath(*ConfigPath)                // path to look for the config file in
-	err := viper.ReadInConfig()                     // Find and read the config files
-	failOnError("Error reading config file: ", err) // Handle errors reading the config file
-	log.Debug("Config used: \n", viper.AllSettings())
+	viper.SetConfigName("consometer")                // name of config file (without extension)
+	viper.AddConfigPath(*ConfigPath)                 // path to look for the config file in
+	err := viper.ReadInConfig()                      // Find and read the config files
+	failOnError("Error reading config file:\n", err) // Handle errors reading the config file
+	log.Debug("Config used:\n", viper.AllSettings())
 
 	regionName := viper.GetString("os_region_name")
 	//	opts, err := buildAuthOptions()
@@ -81,20 +119,30 @@ func main() {
 	}
 
 	provider, err := openstack.AuthenticatedClient(opts)
-	failOnError("Error creating provider: ", err)
+	failOnError("Error creating provider:\n", err)
 
 	idClient := openstack.NewIdentityV2(provider)
 	tenantList := getTenants(idClient)
 
 	objectStoreURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{Type: "object-store", Region: regionName, Availability: gophercloud.AvailabilityAdmin})
-	failOnError("Error retrieving object store admin url: ", err)
-	log.Debug("object store url: ", objectStoreURL)
+	failOnError("Error retrieving object store admin url:\n", err)
+	log.Debug("Object store url:\n", objectStoreURL)
 
-	for _, tenant := range tenantList {
-		accountsURL := strings.Join([]string{objectStoreURL, "v1/AUTH_", tenant.ID}, "")
-		resp, _ := provider.Request("GET", accountsURL, gophercloud.RequestOpts{OkCodes: []int{200}})
-		log.Debug(resp)
+	jobs := make(chan string, len(tenantList))
+	results := make(chan *http.Response, len(tenantList))
+	var wg sync.WaitGroup
+	for w := 1; w <= *workerNumber; w++ {
+		go worker(w, jobs, results, wg, provider)
 	}
-
+	for _, tenant := range tenantList {
+		wg.Add(1)
+		jobs <- strings.Join([]string{objectStoreURL, "v1/AUTH_", tenant.ID}, "")
+	}
+	close(jobs)
+	wg.Wait()
+	log.Debug("All jobs done")
+	close(results)
+	respList := sliceMaker(results)
+	log.Debug(respList)
 	return
 }

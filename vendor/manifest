@@ -81,6 +81,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/streadway/amqp",
+			"repository": "https://github.com/streadway/amqp",
+			"revision": "b4f3ceab0337f013208d31348b578d83c0064744",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/ugorji/go/codec",
 			"repository": "https://github.com/ugorji/go",
 			"revision": "f1f1a805ed361a0e078bb537e4ea78cd37dcf065",
