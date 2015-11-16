@@ -8,7 +8,6 @@ import (
 	"github.com/rackspace/gophercloud/openstack/identity/v2/tenants"
 	"github.com/rackspace/gophercloud/pagination"
 	"github.com/spf13/viper"
-	"net/http"
 	"strings"
 	"sync"
 )
@@ -70,26 +69,37 @@ type accountInfo struct {
 	resource_metadata string // null
 }
 
-func getAccountInfo(job string, results chan<- *http.Response, wg *sync.WaitGroup, provider *gophercloud.ProviderClient) {
+func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, provider *gophercloud.ProviderClient) {
+	defer wg.Done()
+	accountUrl := strings.Join([]string{objectStoreURL, "v1/AUTH_", tenantID}, "")
 	for i := 0; i < 1; i++ {
-		resp, err := provider.Request("GET", job, gophercloud.RequestOpts{OkCodes: []int{200}})
+		resp, err := provider.Request("GET", accountUrl, gophercloud.RequestOpts{OkCodes: []int{200}})
 		if err != nil {
 			log.Debug("Failed to fetch account info : ", err, "  Retrying(", i, ")")
 			continue
 		}
-		// TODO : extract infos from headers to accountInfo struct.
-		//ai := accountInfo{}
-		log.Debug("Fetched account: ", job)
-		results <- resp
-		wg.Done()
+		ai := accountInfo{
+			counter_name:      "storage.objects.size",
+			resource_id:       tenantID,
+			message_id:        "1",
+			timestamp:         resp.Header.Get("x-timestamp"),
+			counter_volume:    resp.Header.Get("x-account-bytes-used"),
+			user_id:           "",
+			source:            "openstack",
+			counter_unit:      "B",
+			project_id:        tenantID,
+			counter_type:      "gauge",
+			resource_metadata: "",
+		}
+		log.Debug("Fetched account: ", accountUrl)
+		results <- ai
 		return
 	}
-	wg.Done()
-
+	// TODO: Add potential error management when account couldn't be queried
 }
 
-func sliceMaker(results <-chan *http.Response) []*http.Response {
-	var s []*http.Response
+func sliceMaker(results <-chan accountInfo) []accountInfo {
+	var s []accountInfo
 	for range results {
 		result := <-results
 		s = append(s, result)
@@ -131,12 +141,11 @@ func main() {
 	log.Debug("Object store url:\n", objectStoreURL)
 
 	// Buffered chan can take all the answers
-	results := make(chan *http.Response, len(tenantList))
+	results := make(chan accountInfo, len(tenantList))
 	var wg sync.WaitGroup
 	for _, tenant := range tenantList {
 		wg.Add(1)
-		accountUrl := strings.Join([]string{objectStoreURL, "v1/AUTH_", tenant.ID}, "")
-		go getAccountInfo(accountUrl, results, &wg, provider)
+		go getAccountInfo(objectStoreURL, tenant.ID, results, &wg, provider)
 	}
 	log.Debug("All jobs launched !")
 	wg.Wait()
