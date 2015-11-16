@@ -1,54 +1,148 @@
 package main
 
 import (
-	"fmt"
+	"flag"
+	"github.com/Sirupsen/logrus"
 	"github.com/rackspace/gophercloud"
 	"github.com/rackspace/gophercloud/openstack"
+	"github.com/rackspace/gophercloud/openstack/identity/v2/tenants"
+	"github.com/rackspace/gophercloud/pagination"
 	"github.com/spf13/viper"
+	"net/http"
+	"strings"
+	"sync"
 )
 
-type credentials struct {
-	KeystoneURI        string `yaml:keystone_uri`
-	SwiftConsoTenant   string `yaml:swift_conso_tenant`
-	SwiftConsoUser     string `yaml:swift_conso_user`
-	SwiftConsoPassword string `yaml:swift_conso_password`
-}
+var log = logrus.New()
 
 func buildAuthOptions() (gophercloud.AuthOptions, error) {
-	var creds credentials
-	if err := viper.UnmarshalKey("credentials", &creds); err != nil {
-		return gophercloud.AuthOptions{}, err
-	}
 
+	mandatoryKeys := []string{"credentials.keystone_uri",
+		"credentials.swift_conso_user",
+		"credentials.swift_conso_password",
+		"credentials.swift_conso_tenant",
+		"os_region_name"}
+
+	for _, key := range mandatoryKeys {
+		if !viper.IsSet(key) {
+			log.Fatal("Incomplete Config. Missing : ", key)
+		}
+
+	}
 	ao := gophercloud.AuthOptions{
-		Username:         creds.SwiftConsoUser,
-		TenantName:       creds.SwiftConsoTenant,
-		Password:         creds.SwiftConsoPassword,
-		IdentityEndpoint: creds.KeystoneURI,
+		IdentityEndpoint: viper.GetString("credentials.keystone_uri"),
+		Username:         viper.GetString("credentials.swift_conso_user"),
+		Password:         viper.GetString("credentials.swift_conso_password"),
+		TenantName:       viper.GetString("credentials.swift_conso_tenant"),
 	}
 	return ao, nil
 }
 
+func failOnError(msg string, err error) {
+	if err != nil {
+		log.Fatal(msg, err)
+	}
+}
+
+func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
+	var list []tenants.Tenant
+	pager := tenants.List(client, nil)
+	pager.EachPage(func(page pagination.Page) (bool, error) {
+		tenantList, err := tenants.ExtractTenants(page)
+		list = append(tenantList)
+		failOnError("Error processing pager:\n", err)
+		return true, nil
+	})
+	return list
+}
+
+type accountInfo struct {
+	counter_name      string //"storage.objects.size",
+	resource_id       string //"d5bbc7c06c9e479dbb91912c045cdeab",
+	message_id        string //"1",
+	timestamp         string // "2013-05-13T14:03:01Z",
+	counter_volume    string // "0",
+	user_id           string // null,
+	source            string // "openstack",
+	counter_unit      string // "B",
+	project_id        string // "d5bbc7c06c9e479dbb91912c045cdeab",
+	counter_type      string // "gauge",
+	resource_metadata string // null
+}
+
+func getAccountInfo(job string, results chan<- *http.Response, wg *sync.WaitGroup, provider *gophercloud.ProviderClient) {
+	for i := 0; i < 1; i++ {
+		resp, err := provider.Request("GET", job, gophercloud.RequestOpts{OkCodes: []int{200}})
+		if err != nil {
+			log.Debug("Failed to fetch account info : ", err, "  Retrying(", i, ")")
+			continue
+		}
+		// TODO : extract infos from headers to accountInfo struct.
+		//ai := accountInfo{}
+		log.Debug("Fetched account: ", job)
+		results <- resp
+		wg.Done()
+		return
+	}
+	wg.Done()
+
+}
+
+func sliceMaker(results <-chan *http.Response) []*http.Response {
+	var s []*http.Response
+	for range results {
+		result := <-results
+		s = append(s, result)
+	}
+	return s
+}
+
 func main() {
+	ConfigPath := flag.String("config", "./etc/swift", "Path of the configuration file directory.")
+	logLevel := flag.Bool("debug", false, "Set log level to debug.")
+	//workerNumber := flag.Int("n", 3, "Number of goroutines to launch.")
+	flag.Parse()
+	if *logLevel {
+		log.Level = logrus.DebugLevel
+	}
 
 	viper.SetConfigType("yaml")
-	viper.SetConfigName("consometer")  // name of config file (without extension)
-	viper.AddConfigPath("./etc/swift") // path to look for the config file in
-	err := viper.ReadInConfig()        // Find and read the config file
-	if err != nil {                    // Handle errors reading the config file
-		panic(fmt.Errorf("Fatal error config file: %s \n", err))
-	}
+	viper.SetConfigName("consometer")
+	viper.AddConfigPath(*ConfigPath)
+	err := viper.ReadInConfig()
+	failOnError("Error reading config file:\n", err)
+	log.Debug("Config used:\n", viper.AllSettings())
 
-	options, err := buildAuthOptions()
-	if err != nil {
-		panic(fmt.Errorf("Fatal failed to read credentials : %s \n", err))
+	if !viper.IsSet("os_region_name") {
+		log.Fatal("Missing Region in config !")
 	}
-	fmt.Println(viper.AllSettings())
+	regionName := viper.GetString("os_region_name")
 
-	client, err := openstack.AuthenticatedClient(options)
-	if err != nil {
-		fmt.Println("Everything went as planned")
-		panic("Yolo")
+	opts, err := buildAuthOptions()
+
+	provider, err := openstack.AuthenticatedClient(opts)
+	failOnError("Error creating provider:\n", err)
+
+	idClient := openstack.NewIdentityV2(provider)
+	tenantList := getTenants(idClient)
+
+	objectStoreURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{Type: "object-store", Region: regionName, Availability: gophercloud.AvailabilityAdmin})
+	failOnError("Error retrieving object store admin url:\n", err)
+	log.Debug("Object store url:\n", objectStoreURL)
+
+	// Buffered chan can take all the answers
+	results := make(chan *http.Response, len(tenantList))
+	var wg sync.WaitGroup
+	for _, tenant := range tenantList {
+		wg.Add(1)
+		accountUrl := strings.Join([]string{objectStoreURL, "v1/AUTH_", tenant.ID}, "")
+		go getAccountInfo(accountUrl, results, &wg, provider)
 	}
-	fmt.Println(client.IdentityEndpoint)
+	log.Debug("All jobs launched !")
+	wg.Wait()
+	log.Debug("All jobs done")
+	close(results)
+	respList := sliceMaker(results)
+	log.Debug(respList)
+	return
 }

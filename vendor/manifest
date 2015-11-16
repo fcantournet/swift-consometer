@@ -8,6 +8,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/Sirupsen/logrus",
+			"repository": "https://github.com/Sirupsen/logrus",
+			"revision": "6f383a9b2998dd6f401704269c3e6e192f6175ad",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/armon/consul-api",
 			"repository": "https://github.com/armon/consul-api",
 			"revision": "dcfedd50ed5334f96adee43fc88518a4f095e15c",
@@ -75,6 +81,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/streadway/amqp",
+			"repository": "https://github.com/streadway/amqp",
+			"revision": "b4f3ceab0337f013208d31348b578d83c0064744",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/ugorji/go/codec",
 			"repository": "https://github.com/ugorji/go",
 			"revision": "f1f1a805ed361a0e078bb537e4ea78cd37dcf065",
@@ -115,6 +127,18 @@
 			"revision": "575fdbe86e5dd89229707ebec0575ce7d088a4a6",
 			"branch": "master",
 			"path": "/openpgp"
+		},
+		{
+			"importpath": "gopkg.in/airbrake/gobrake.v2",
+			"repository": "https://gopkg.in/airbrake/gobrake.v2",
+			"revision": "e5efbe565a5a63d8aafee7efa2f4fdd7f42b7bd3",
+			"branch": "master"
+		},
+		{
+			"importpath": "gopkg.in/gemnasium/logrus-airbrake-hook.v2",
+			"repository": "https://gopkg.in/gemnasium/logrus-airbrake-hook.v2",
+			"revision": "31e6fd4bd5a98d8ee7673d24bc54ec73c31810dd",
+			"branch": "master"
 		},
 		{
 			"importpath": "gopkg.in/yaml.v2",
