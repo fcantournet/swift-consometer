@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/viper"
 	"strings"
 	"sync"
+	"time"
 )
 
 var log = logrus.New()
@@ -143,12 +144,14 @@ func main() {
 	// Buffered chan can take all the answers
 	results := make(chan accountInfo, len(tenantList))
 	var wg sync.WaitGroup
+	start := time.Now()
 	for _, tenant := range tenantList {
 		wg.Add(1)
 		go getAccountInfo(objectStoreURL, tenant.ID, results, &wg, provider)
 	}
 	log.Debug("All jobs launched !")
 	wg.Wait()
+	log.Debug("Processed ", len(tenantList), " tenants in ", time.Since(start))
 	log.Debug("All jobs done")
 	close(results)
 	respList := aggregateResponses(results)
