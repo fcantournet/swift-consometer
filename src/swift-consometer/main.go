@@ -9,6 +9,7 @@ import (
 	"github.com/rackspace/gophercloud/openstack/identity/v2/tenants"
 	"github.com/rackspace/gophercloud/pagination"
 	"github.com/spf13/viper"
+	"github.com/streadway/amqp"
 	"strings"
 	"sync"
 	"time"
@@ -16,27 +17,22 @@ import (
 
 var log = logrus.New()
 
-func buildAuthOptions() (gophercloud.AuthOptions, error) {
-
+func checkConfig() {
 	mandatoryKeys := []string{"credentials.keystone_uri",
 		"credentials.swift_conso_user",
 		"credentials.swift_conso_password",
 		"credentials.swift_conso_tenant",
+		"rabbit.host",
+		"rabbit.user",
+		"rabbit.password",
 		"os_region_name"}
 
 	for _, key := range mandatoryKeys {
 		if !viper.IsSet(key) {
-			log.Fatal("Incomplete Config. Missing : ", key)
+			log.Fatal("Incomplete Config. Missing: ", key)
 		}
 
 	}
-	ao := gophercloud.AuthOptions{
-		IdentityEndpoint: viper.GetString("credentials.keystone_uri"),
-		Username:         viper.GetString("credentials.swift_conso_user"),
-		Password:         viper.GetString("credentials.swift_conso_password"),
-		TenantName:       viper.GetString("credentials.swift_conso_tenant"),
-	}
-	return ao, nil
 }
 
 func failOnError(msg string, err error) {
@@ -71,13 +67,25 @@ type accountInfo struct {
 	Resource_metadata string `json:"ressource_metadata"` // null
 }
 
+type rabbitPayload struct {
+	Args struct {
+		Data []accountInfo `json:"data"`
+	} `json:"args"`
+}
+
 func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, provider *gophercloud.ProviderClient) {
 	defer wg.Done()
 	accountUrl := strings.Join([]string{objectStoreURL, "v1/AUTH_", tenantID}, "")
-	for i := 0; i < 1; i++ {
+	var max_retries int = 1
+	for i := 0; i <= max_retries; i++ {
 		resp, err := provider.Request("GET", accountUrl, gophercloud.RequestOpts{OkCodes: []int{200}})
 		if err != nil {
-			log.Debug("Failed to fetch account info : ", err, "  Retrying(", i, ")")
+			if i == max_retries {
+				log.Error("Failed to fetch account info : ", err)
+				continue
+			}
+			log.Warn("Failed to fetch account info : ", err, "  Retrying(", i, ")")
+			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 		ai := accountInfo{
@@ -122,15 +130,15 @@ func main() {
 	viper.AddConfigPath(*ConfigPath)
 	err := viper.ReadInConfig()
 	failOnError("Error reading config file:\n", err)
+	checkConfig()
 	log.Debug("Config used:\n", viper.AllSettings())
-
-	if !viper.IsSet("os_region_name") {
-		log.Fatal("Missing Region in config !")
-	}
 	regionName := viper.GetString("os_region_name")
-
-	opts, err := buildAuthOptions()
-
+	opts := gophercloud.AuthOptions{
+		IdentityEndpoint: viper.GetString("credentials.keystone_uri"),
+		Username:         viper.GetString("credentials.swift_conso_user"),
+		Password:         viper.GetString("credentials.swift_conso_password"),
+		TenantName:       viper.GetString("credentials.swift_conso_tenant"),
+	}
 	provider, err := openstack.AuthenticatedClient(opts)
 	failOnError("Error creating provider:\n", err)
 
@@ -155,7 +163,39 @@ func main() {
 	log.Debug("All jobs done")
 	close(results)
 	respList := aggregateResponses(results)
-	output, _ := json.Marshal(respList)
+	rbMsg := rabbitPayload{}
+	rbMsg.Args.Data = respList
+	output, _ := json.Marshal(rbMsg)
 	log.Debug(string(output))
+	return
+
+	rabbitCreds := map[string]string{
+		"host":     viper.GetString("rabbit.host"),
+		"user":     viper.GetString("rabbit.user"),
+		"password": viper.GetString("rabbit.password"),
+	}
+
+	rabbitURI := strings.Join([]string{"amqp://", rabbitCreds["user"], ":", rabbitCreds["password"], "@", rabbitCreds["host"]}, "")
+	log.Debug("Rabbit used:\n", rabbitURI)
+
+	conn, err := amqp.Dial(rabbitURI)
+	failOnError("Failed to connect to RabbitMQ", err)
+	defer conn.Close()
+	ch, err := conn.Channel()
+	failOnError("Failed to open a channel", err)
+	defer ch.Close()
+
+	//TODO Get the right options
+	err = ch.Publish(
+		"",    // exchange
+		"bob", // routing key
+		false, // mandatory
+		false, // immediate
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        []byte(output),
+		})
+	failOnError("Failed to publish the message:\n", err)
+	log.Debug("Sent to RabbitMq:\n", output)
 	return
 }
