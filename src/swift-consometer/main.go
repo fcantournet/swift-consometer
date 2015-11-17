@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"github.com/Sirupsen/logrus"
 	"github.com/rackspace/gophercloud"
@@ -56,17 +57,17 @@ func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
 }
 
 type accountInfo struct {
-	counter_name      string //"storage.objects.size",
-	resource_id       string //"d5bbc7c06c9e479dbb91912c045cdeab",
-	message_id        string //"1",
-	timestamp         string // "2013-05-13T14:03:01Z",
-	counter_volume    string // "0",
-	user_id           string // null,
-	source            string // "openstack",
-	counter_unit      string // "B",
-	project_id        string // "d5bbc7c06c9e479dbb91912c045cdeab",
-	counter_type      string // "gauge",
-	resource_metadata string // null
+	Counter_name      string `json:"counter_name"`       //"storage.objects.size",
+	Resource_id       string `json:"counter_name"`       //"d5bbc7c06c9e479dbb91912c045cdeab",
+	Message_id        string `json:"message_id"`         //"1",
+	Timestamp         string `json:"timestamp"`          // "2013-05-13T14:03:01Z",
+	Counter_volume    string `json:"counter_volume"`     // "0",
+	User_id           string `json:"user_id"`            // null,
+	Source            string `json:"source"`             // "openstack",
+	Counter_unit      string `json:"counter_unit"`       // "B",
+	Project_id        string `json:"project_id"`         // "d5bbc7c06c9e479dbb91912c045cdeab",
+	Counter_type      string `json:"counter_type"`       // "gauge",
+	Resource_metadata string `json:"ressource_metadata"` // null
 }
 
 func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, provider *gophercloud.ProviderClient) {
@@ -79,17 +80,17 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 			continue
 		}
 		ai := accountInfo{
-			counter_name:      "storage.objects.size",
-			resource_id:       tenantID,
-			message_id:        "1",
-			timestamp:         resp.Header.Get("x-timestamp"),
-			counter_volume:    resp.Header.Get("x-account-bytes-used"),
-			user_id:           "",
-			source:            "openstack",
-			counter_unit:      "B",
-			project_id:        tenantID,
-			counter_type:      "gauge",
-			resource_metadata: "",
+			Counter_name:      "storage.objects.size",
+			Resource_id:       tenantID,
+			Message_id:        "1",
+			Timestamp:         resp.Header.Get("x-timestamp"),
+			Counter_volume:    resp.Header.Get("x-account-bytes-used"),
+			User_id:           "",
+			Source:            "openstack",
+			Counter_unit:      "B",
+			Project_id:        tenantID,
+			Counter_type:      "gauge",
+			Resource_metadata: "",
 		}
 		log.Debug("Fetched account: ", accountUrl)
 		results <- ai
@@ -98,7 +99,7 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 	// TODO: Add potential error management when account couldn't be queried
 }
 
-func sliceMaker(results <-chan accountInfo) []accountInfo {
+func aggregateResponses(results <-chan accountInfo) []accountInfo {
 	var s []accountInfo
 	for range results {
 		result := <-results
@@ -110,7 +111,6 @@ func sliceMaker(results <-chan accountInfo) []accountInfo {
 func main() {
 	ConfigPath := flag.String("config", "./etc/swift", "Path of the configuration file directory.")
 	logLevel := flag.Bool("debug", false, "Set log level to debug.")
-	//workerNumber := flag.Int("n", 3, "Number of goroutines to launch.")
 	flag.Parse()
 	if *logLevel {
 		log.Level = logrus.DebugLevel
@@ -151,7 +151,8 @@ func main() {
 	wg.Wait()
 	log.Debug("All jobs done")
 	close(results)
-	respList := sliceMaker(results)
-	log.Debug(respList)
+	respList := aggregateResponses(results)
+	output, _ := json.Marshal(respList)
+	log.Debug(string(output))
 	return
 }
