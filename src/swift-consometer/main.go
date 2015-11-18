@@ -25,6 +25,8 @@ func checkConfig() {
 		"rabbit.host",
 		"rabbit.user",
 		"rabbit.password",
+		"rabbit.exchange",
+		"rabbit.queue",
 		"os_region_name"}
 
 	for _, key := range mandatoryKeys {
@@ -55,7 +57,7 @@ func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
 
 type accountInfo struct {
 	Counter_name      string `json:"counter_name"`       //"storage.objects.size",
-	Resource_id       string `json:"counter_name"`       //"d5bbc7c06c9e479dbb91912c045cdeab",
+	Resource_id       string `json:"resource_id"`        //"d5bbc7c06c9e479dbb91912c045cdeab",
 	Message_id        string `json:"message_id"`         //"1",
 	Timestamp         string `json:"timestamp"`          // "2013-05-13T14:03:01Z",
 	Counter_volume    string `json:"counter_volume"`     // "0",
@@ -110,8 +112,7 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 
 func aggregateResponses(results <-chan accountInfo) []accountInfo {
 	var s []accountInfo
-	for range results {
-		result := <-results
+	for result := range results {
 		s = append(s, result)
 	}
 	return s
@@ -163,21 +164,22 @@ func main() {
 	log.Debug("All jobs done")
 	close(results)
 	respList := aggregateResponses(results)
-	rbMsg := rabbitPayload{}
-	rbMsg.Args.Data = respList
-	output, _ := json.Marshal(rbMsg)
-	log.Debug(string(output))
-	return
+	output := rabbitPayload{}
+	output.Args.Data = respList
+	rbMsg, _ := json.Marshal(output)
+	log.Debug("Created ", len(rbMsg), "B length body:\n", string(rbMsg))
 
 	rabbitCreds := map[string]string{
 		"host":     viper.GetString("rabbit.host"),
 		"user":     viper.GetString("rabbit.user"),
 		"password": viper.GetString("rabbit.password"),
+		"exchange": viper.GetString("rabbit.exchange"),
+		"queue":    viper.GetString("rabbit.queue"),
 	}
 
 	rabbitURI := strings.Join([]string{"amqp://", rabbitCreds["user"], ":", rabbitCreds["password"], "@", rabbitCreds["host"]}, "")
 	log.Debug("Rabbit used:\n", rabbitURI)
-
+	return
 	conn, err := amqp.Dial(rabbitURI)
 	failOnError("Failed to connect to RabbitMQ", err)
 	defer conn.Close()
@@ -187,13 +189,13 @@ func main() {
 
 	//TODO Get the right options
 	err = ch.Publish(
-		"",    // exchange
-		"bob", // routing key
-		false, // mandatory
-		false, // immediate
+		rabbitCreds["exchange"], // exchange
+		rabbitCreds["queue"],    // routing key
+		false,                   // mandatory
+		false,                   // immediate
 		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(output),
+			ContentType: "application/json",
+			Body:        []byte(rbMsg),
 		})
 	failOnError("Failed to publish the message:\n", err)
 	log.Debug("Sent to RabbitMq:\n", output)

@@ -7,4 +7,6 @@ rabbit:
   host: "d-msqcld-0000.usr.lab0.aub.cloudwatt.net:5672"
   userid: "ceilometer"
   password: "yolobob"
+  exchange: "openstack"
+  queue: "ceilometer"
 os_region_name: "fr1"
