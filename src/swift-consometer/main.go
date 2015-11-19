@@ -33,8 +33,16 @@ func checkConfig() {
 		if !viper.IsSet(key) {
 			log.Fatal("Incomplete Config. Missing: ", key)
 		}
-
 	}
+}
+
+type rabbitCreds struct {
+	host     string
+	user     string
+	password string
+	exchange string
+	queue    string
+	uri      string
 }
 
 func failOnError(msg string, err error) {
@@ -83,10 +91,10 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 		resp, err := provider.Request("GET", accountUrl, gophercloud.RequestOpts{OkCodes: []int{200}})
 		if err != nil {
 			if i == max_retries {
-				log.Error("Failed to fetch account info : ", err)
+				log.Error("Failed to fetch account info: ", err)
 				continue
 			}
-			log.Warn("Failed to fetch account info : ", err, "  Retrying(", i, ")")
+			log.Warn("Failed to fetch account info :", err, "  Retrying(", i, ")")
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
@@ -118,28 +126,48 @@ func aggregateResponses(results <-chan accountInfo) []accountInfo {
 	return s
 }
 
-func main() {
-	ConfigPath := flag.String("config", "./etc/swift", "Path of the configuration file directory.")
-	logLevel := flag.Bool("debug", false, "Set log level to debug.")
-	flag.Parse()
-	if *logLevel {
-		log.Level = logrus.DebugLevel
-	}
+func readConfig(configPath string, logLevel string) (string, gophercloud.AuthOptions, rabbitCreds) {
+
+	parsedLogLevel, err := logrus.ParseLevel(logLevel)
+	failOnError("Bad log level:\n", err)
+	log.Level = parsedLogLevel
 
 	viper.SetConfigType("yaml")
 	viper.SetConfigName("consometer")
-	viper.AddConfigPath(*ConfigPath)
-	err := viper.ReadInConfig()
+	viper.AddConfigPath(configPath)
+	err = viper.ReadInConfig()
 	failOnError("Error reading config file:\n", err)
 	checkConfig()
 	log.Debug("Config used:\n", viper.AllSettings())
-	regionName := viper.GetString("os_region_name")
+
+	regionName := viper.GetString("os_regionName")
+
 	opts := gophercloud.AuthOptions{
 		IdentityEndpoint: viper.GetString("credentials.keystone_uri"),
 		Username:         viper.GetString("credentials.swift_conso_user"),
 		Password:         viper.GetString("credentials.swift_conso_password"),
 		TenantName:       viper.GetString("credentials.swift_conso_tenant"),
 	}
+
+	creds := rabbitCreds{
+		host:     viper.GetString("rabbit.host"),
+		user:     viper.GetString("rabbit.user"),
+		password: viper.GetString("rabbit.password"),
+		exchange: viper.GetString("rabbit.exchange"),
+		queue:    viper.GetString("rabbit.queue"),
+	}
+	creds.uri = strings.Join([]string{"amqp://", creds.user, ":", creds.password, "@", creds.host}, "")
+
+	return regionName, opts, creds
+}
+
+func main() {
+	configPath := flag.String("config", "./etc/swift", "Path of the configuration file directory.")
+	logLevel := flag.String("l", "info", "Set log level {info, debug, warn, error, panic}. Default is info.")
+	flag.Parse()
+
+	regionName, opts, rabbitCreds := readConfig(*configPath, *logLevel)
+
 	provider, err := openstack.AuthenticatedClient(opts)
 	failOnError("Error creating provider:\n", err)
 
@@ -168,19 +196,9 @@ func main() {
 	output.Args.Data = respList
 	rbMsg, _ := json.Marshal(output)
 	log.Debug("Created ", len(rbMsg), "B length body:\n", string(rbMsg))
-
-	rabbitCreds := map[string]string{
-		"host":     viper.GetString("rabbit.host"),
-		"user":     viper.GetString("rabbit.user"),
-		"password": viper.GetString("rabbit.password"),
-		"exchange": viper.GetString("rabbit.exchange"),
-		"queue":    viper.GetString("rabbit.queue"),
-	}
-
-	rabbitURI := strings.Join([]string{"amqp://", rabbitCreds["user"], ":", rabbitCreds["password"], "@", rabbitCreds["host"]}, "")
-	log.Debug("Rabbit used:\n", rabbitURI)
+	log.Debug("Connecting to:\n", rabbitCreds.uri)
 	return
-	conn, err := amqp.Dial(rabbitURI)
+	conn, err := amqp.Dial(rabbitCreds.uri)
 	failOnError("Failed to connect to RabbitMQ", err)
 	defer conn.Close()
 	ch, err := conn.Channel()
@@ -189,10 +207,10 @@ func main() {
 
 	//TODO Get the right options
 	err = ch.Publish(
-		rabbitCreds["exchange"], // exchange
-		rabbitCreds["queue"],    // routing key
-		false,                   // mandatory
-		false,                   // immediate
+		rabbitCreds.exchange, // exchange
+		rabbitCreds.queue,    // routing key
+		false,                // mandatory
+		false,                // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        []byte(rbMsg),
