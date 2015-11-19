@@ -26,7 +26,8 @@ func checkConfig() {
 		"rabbit.user",
 		"rabbit.password",
 		"rabbit.exchange",
-		"rabbit.queue",
+		"rabbit.routing_key",
+		"rabbit.vhost",
 		"os_region_name"}
 
 	for _, key := range mandatoryKeys {
@@ -37,12 +38,13 @@ func checkConfig() {
 }
 
 type rabbitCreds struct {
-	host     string
-	user     string
-	password string
-	exchange string
-	queue    string
-	uri      string
+	host        string
+	user        string
+	password    string
+	vhost       string
+	exchange    string
+	routing_key string
+	uri         string
 }
 
 func failOnError(msg string, err error) {
@@ -150,13 +152,14 @@ func readConfig(configPath string, logLevel string) (string, gophercloud.AuthOpt
 	}
 
 	creds := rabbitCreds{
-		host:     viper.GetString("rabbit.host"),
-		user:     viper.GetString("rabbit.user"),
-		password: viper.GetString("rabbit.password"),
-		exchange: viper.GetString("rabbit.exchange"),
-		queue:    viper.GetString("rabbit.queue"),
+		host:        viper.GetString("rabbit.host"),
+		user:        viper.GetString("rabbit.user"),
+		password:    viper.GetString("rabbit.password"),
+		vhost:       viper.GetString("rabbit.vhost"),
+		exchange:    viper.GetString("rabbit.exchange"),
+		routing_key: viper.GetString("rabbit.routing_key"),
 	}
-	creds.uri = strings.Join([]string{"amqp://", creds.user, ":", creds.password, "@", creds.host}, "")
+	creds.uri = strings.Join([]string{"amqp://", creds.user, ":", creds.password, "@", creds.host, "/", creds.vhost}, "")
 
 	return regionName, opts, creds
 }
@@ -197,7 +200,7 @@ func main() {
 	rbMsg, _ := json.Marshal(output)
 	log.Debug("Created ", len(rbMsg), "B length body:\n", string(rbMsg))
 	log.Debug("Connecting to:\n", rabbitCreds.uri)
-	return
+
 	conn, err := amqp.Dial(rabbitCreds.uri)
 	failOnError("Failed to connect to RabbitMQ", err)
 	defer conn.Close()
@@ -205,17 +208,16 @@ func main() {
 	failOnError("Failed to open a channel", err)
 	defer ch.Close()
 
-	//TODO Get the right options
 	err = ch.Publish(
-		rabbitCreds.exchange, // exchange
-		rabbitCreds.queue,    // routing key
-		false,                // mandatory
-		false,                // immediate
+		rabbitCreds.exchange,    // exchange
+		rabbitCreds.routing_key, // routing key
+		false, // mandatory
+		false, // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        []byte(rbMsg),
 		})
 	failOnError("Failed to publish the message:\n", err)
-	log.Debug("Sent to RabbitMq:\n", output)
+	log.Debug("Message sent!")
 	return
 }
