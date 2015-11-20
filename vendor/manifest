@@ -10,7 +10,7 @@
 		{
 			"importpath": "github.com/Sirupsen/logrus",
 			"repository": "https://github.com/Sirupsen/logrus",
-			"revision": "6f383a9b2998dd6f401704269c3e6e192f6175ad",
+			"revision": "a22723f16efea2e89b7bd67d10ed077c47c14eb4",
 			"branch": "master"
 		},
 		{
@@ -53,7 +53,7 @@
 		{
 			"importpath": "github.com/rackspace/gophercloud",
 			"repository": "https://github.com/rackspace/gophercloud",
-			"revision": "d471e5750cbf9a858a45b646968869f394077d3a",
+			"revision": "761cff8afb6a8e7f42c5554a90dae72f341bb481",
 			"branch": "master"
 		},
 		{
@@ -65,7 +65,7 @@
 		{
 			"importpath": "github.com/spf13/jwalterweatherman",
 			"repository": "https://github.com/spf13/jwalterweatherman",
-			"revision": "3d60171a64319ef63c78bd45bd60e6eab1e75f8b",
+			"revision": "c2aa07df593850a04644d77bb757d002e517a296",
 			"branch": "master"
 		},
 		{
@@ -77,7 +77,7 @@
 		{
 			"importpath": "github.com/spf13/viper",
 			"repository": "https://github.com/spf13/viper",
-			"revision": "d2f75b4befcf56b1627807acc5f10fd19e9784cf",
+			"revision": "e37b56e207dda4d79b9defe0548e960658ee8b6b",
 			"branch": "master"
 		},
 		{
@@ -89,7 +89,7 @@
 		{
 			"importpath": "github.com/ugorji/go/codec",
 			"repository": "https://github.com/ugorji/go",
-			"revision": "f1f1a805ed361a0e078bb537e4ea78cd37dcf065",
+			"revision": "ea9cd21fa0bc41ee4bdd50ac7ed8cbc7ea2ed960",
 			"branch": "master",
 			"path": "/codec"
 		},
@@ -117,14 +117,14 @@
 		{
 			"importpath": "golang.org/x/crypto/cast5",
 			"repository": "https://go.googlesource.com/crypto",
-			"revision": "575fdbe86e5dd89229707ebec0575ce7d088a4a6",
+			"revision": "346896d57731cb5670b36c6178fc5519f3225980",
 			"branch": "master",
 			"path": "/cast5"
 		},
 		{
 			"importpath": "golang.org/x/crypto/openpgp",
 			"repository": "https://go.googlesource.com/crypto",
-			"revision": "575fdbe86e5dd89229707ebec0575ce7d088a4a6",
+			"revision": "346896d57731cb5670b36c6178fc5519f3225980",
 			"branch": "master",
 			"path": "/openpgp"
 		},

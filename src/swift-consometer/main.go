@@ -6,10 +6,12 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/rackspace/gophercloud"
 	"github.com/rackspace/gophercloud/openstack"
-	"github.com/rackspace/gophercloud/openstack/identity/v2/tenants"
+	"github.com/rackspace/gophercloud/openstack/identity/v3/tenants"
+	"github.com/rackspace/gophercloud/openstack/identity/v3/tokens"
 	"github.com/rackspace/gophercloud/pagination"
 	"github.com/spf13/viper"
 	"github.com/streadway/amqp"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -59,24 +61,71 @@ func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
 	pager.EachPage(func(page pagination.Page) (bool, error) {
 		tenantList, err := tenants.ExtractTenants(page)
 		list = append(tenantList)
-		failOnError("Error processing pager:\n", err)
+		failOnError("Error processing pager for tenants:\n", err)
 		return true, nil
 	})
 	return list
 }
 
+type catalog struct {
+	Endpoints []struct {
+		Region_id string `json:"region_id"`
+		Links     struct {
+			self string `json:"self"`
+		} `json:"links"`
+		Url        string `json:"url"`
+		Region     string `json:"region"`
+		Enabled    string `json:"enabled"`
+		Interface  string `json:"interface"`
+		Service_id string `json:"service_id"`
+		Id         string `json:"id"`
+	} `json:"endpoints"`
+	Links struct {
+		self     string  `json:"self"`
+		previous *string `json:"previous"`
+		next     *string `json:"next"`
+	} `json:"links"`
+}
+
+/*
+The gophercloud library gets the api endpoints by parsing the keystone token.
+In prevision of fernet tokens we implement our own way of getting the catalog using the v3 api of keystone.
+*/
+func getEndpoint(client *gophercloud.ServiceClient, serviceName string, region string) (string, error) {
+	token, err := tokens.Get(client, "token_id").Extract()
+	failOnError("Failed getting token from ServiceClient:\n", err)
+	req, err := http.NewRequest("GET", client.ServiceURL(), nil)
+	failOnError("Failed creating the request:\n", err)
+	req.Header.Set("X-Auth-Token", token)
+	httpClient := &http.client{}
+	resp, err := httpClient.Do(req)
+	failOnError("Request failed:\n", err)
+	if status := resp.Status; status != string(http.StatusOK) {
+		log.Fatal("Bad response status when getting endpoints catalog: ", status, "\nExpected 200")
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	var c catalog
+	err = json.Unmarshal(body, &c)
+	//TODO get right endpoint
+	return c.endpoints[1]
+}
+
 type accountInfo struct {
-	Counter_name      string `json:"counter_name"`       //"storage.objects.size",
-	Resource_id       string `json:"resource_id"`        //"d5bbc7c06c9e479dbb91912c045cdeab",
-	Message_id        string `json:"message_id"`         //"1",
-	Timestamp         string `json:"timestamp"`          // "2013-05-13T14:03:01Z",
-	Counter_volume    string `json:"counter_volume"`     // "0",
-	User_id           string `json:"user_id"`            // null,
-	Source            string `json:"source"`             // "openstack",
-	Counter_unit      string `json:"counter_unit"`       // "B",
-	Project_id        string `json:"project_id"`         // "d5bbc7c06c9e479dbb91912c045cdeab",
-	Counter_type      string `json:"counter_type"`       // "gauge",
-	Resource_metadata string `json:"ressource_metadata"` // null
+	Counter_name      string  `json:"counter_name"`       //"storage.objects.size",
+	Resource_id       string  `json:"resource_id"`        //"d5bbc7c06c9e479dbb91912c045cdeab",
+	Message_id        string  `json:"message_id"`         //"1",
+	Timestamp         string  `json:"timestamp"`          // "2013-05-13T14:03:01Z",
+	Counter_volume    string  `json:"counter_volume"`     // "0",
+	User_id           *string `json:"user_id"`            // null,
+	Source            string  `json:"source"`             // "openstack",
+	Counter_unit      string  `json:"counter_unit"`       // "B",
+	Project_id        string  `json:"project_id"`         // "d5bbc7c06c9e479dbb91912c045cdeab",
+	Counter_type      string  `json:"counter_type"`       // "gauge",
+	Resource_metadata *string `json:"ressource_metadata"` // null
 }
 
 type rabbitPayload struct {
@@ -106,12 +155,12 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 			Message_id:        "1",
 			Timestamp:         resp.Header.Get("x-timestamp"),
 			Counter_volume:    resp.Header.Get("x-account-bytes-used"),
-			User_id:           "",
+			User_id:           nil,
 			Source:            "openstack",
 			Counter_unit:      "B",
 			Project_id:        tenantID,
 			Counter_type:      "gauge",
-			Resource_metadata: "",
+			Resource_metadata: nil,
 		}
 		log.Debug("Fetched account: ", accountUrl)
 		results <- ai
@@ -174,13 +223,16 @@ func main() {
 	provider, err := openstack.AuthenticatedClient(opts)
 	failOnError("Error creating provider:\n", err)
 
-	idClient := openstack.NewIdentityV2(provider)
+	idClient := openstack.NewIdentityV3(provider)
 	tenantList := getTenants(idClient)
 
-	objectStoreURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{Type: "object-store", Region: regionName, Availability: gophercloud.AvailabilityAdmin})
+	// objectStoreURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{Type: "object-store", Region: regionName, Availability: gophercloud.AvailabilityAdmin})
+
+	objectStoreURl, err := getEndpoint(idClient, "object-store", regionName)
 	failOnError("Error retrieving object store admin url:\n", err)
 	log.Debug("Object store url:\n", objectStoreURL)
-
+	//TODO delete this return
+	return
 	// Buffered chan can take all the answers
 	results := make(chan accountInfo, len(tenantList))
 	var wg sync.WaitGroup
