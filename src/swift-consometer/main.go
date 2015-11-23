@@ -6,11 +6,9 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/rackspace/gophercloud"
 	"github.com/rackspace/gophercloud/openstack"
-	"github.com/rackspace/gophercloud/openstack/identity/v3/tenants"
-	"github.com/rackspace/gophercloud/openstack/identity/v3/tokens"
-	"github.com/rackspace/gophercloud/pagination"
 	"github.com/spf13/viper"
 	"github.com/streadway/amqp"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
@@ -39,43 +37,73 @@ func checkConfig() {
 	}
 }
 
-type rabbitCreds struct {
-	host        string
-	user        string
-	password    string
-	vhost       string
-	exchange    string
-	routing_key string
-	uri         string
-}
-
 func failOnError(msg string, err error) {
 	if err != nil {
 		log.Fatal(msg, err)
 	}
 }
 
-func getTenants(client *gophercloud.ServiceClient) []tenants.Tenant {
-	var list []tenants.Tenant
-	pager := tenants.List(client, nil)
-	pager.EachPage(func(page pagination.Page) (bool, error) {
-		tenantList, err := tenants.ExtractTenants(page)
-		list = append(tenantList)
-		failOnError("Error processing pager for tenants:\n", err)
-		return true, nil
-	})
-	return list
+func serviceGet(client *gophercloud.ServiceClient, path string) []byte {
+	token := client.TokenID
+	URL := strings.Join([]string{client.ServiceURL(), path}, "")
+	req, err := http.NewRequest("GET", URL, nil)
+	failOnError("Failed creating the request:\n", err)
+	req.Header.Set("X-Auth-Token", token)
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	failOnError("Request failed:\n", err)
+	if status := resp.StatusCode; status != http.StatusOK {
+		log.Fatal("Bad response status when getting ", path, " (expecting 200):\n", status)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	failOnError("Could not read body from request:\n", err)
+	return body
 }
 
-type catalog struct {
+type servicesCatalog struct {
+	Services []struct {
+		Description string `json:"description"` //"Nova Compute Service"
+		Enabled     bool   `json:"enabled"`     //true
+		Id          string `json:"id"`          //"1999c3a858c7408fb586817620695098"
+		Links       struct {
+			self string `json:"self"`
+		} `json:"links"`
+		Name string `json:"name"` //"nova"
+		Type string `json:"type"` // compute"
+	} `json:"Services"`
+	Links struct {
+		self     string  `json:"self"`
+		previous *string `json:"previous"`
+		next     *string `json:"next"`
+	} `json:"links"`
+}
+
+func getServiceId(client *gophercloud.ServiceClient, serviceType string) string {
+	body := serviceGet(client, "services")
+	var c servicesCatalog
+	err := json.Unmarshal(body, &c)
+	failOnError("Failed unmarshalling services catalog:\n", err)
+	var result []string
+	for _, service := range c.Services {
+		if service.Type == serviceType {
+			result = append(result, service.Id)
+		}
+	}
+	if len(result) > 1 {
+		log.Fatal("Multiple services available with same name:\n", result)
+	}
+	return result[0]
+}
+
+type endpointsCatalog struct {
 	Endpoints []struct {
-		Region_id string `json:"region_id"`
-		Links     struct {
+		Links struct {
 			self string `json:"self"`
 		} `json:"links"`
 		Url        string `json:"url"`
 		Region     string `json:"region"`
-		Enabled    string `json:"enabled"`
+		Enabled    bool   `json:"enabled"`
 		Interface  string `json:"interface"`
 		Service_id string `json:"service_id"`
 		Id         string `json:"id"`
@@ -87,31 +115,39 @@ type catalog struct {
 	} `json:"links"`
 }
 
-/*
-The gophercloud library gets the api endpoints by parsing the keystone token.
-In prevision of fernet tokens we implement our own way of getting the catalog using the v3 api of keystone.
-*/
-func getEndpoint(client *gophercloud.ServiceClient, serviceName string, region string) (string, error) {
-	token, err := tokens.Get(client, "token_id").Extract()
-	failOnError("Failed getting token from ServiceClient:\n", err)
-	req, err := http.NewRequest("GET", client.ServiceURL(), nil)
-	failOnError("Failed creating the request:\n", err)
-	req.Header.Set("X-Auth-Token", token)
-	httpClient := &http.client{}
-	resp, err := httpClient.Do(req)
-	failOnError("Request failed:\n", err)
-	if status := resp.Status; status != string(http.StatusOK) {
-		log.Fatal("Bad response status when getting endpoints catalog: ", status, "\nExpected 200")
+func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region string, eInterface string) string {
+	body := serviceGet(client, "endpoints")
+	var c endpointsCatalog
+	err := json.Unmarshal(body, &c)
+	failOnError("Failed unmarshalling endpoint catalog:\n", err)
+	serviceId := getServiceId(client, serviceType)
+	var result []string
+	for _, endpoint := range c.Endpoints {
+		if endpoint.Region == region && endpoint.Service_id == serviceId && endpoint.Interface == eInterface {
+			result = append(result, endpoint.Url)
+		}
 	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalln(err)
+	if len(result) > 1 {
+		log.Fatal("Multiple endpoints available:\n", result)
 	}
-	var c catalog
-	err = json.Unmarshal(body, &c)
-	//TODO get right endpoint
-	return c.endpoints[1]
+	return result[0]
+}
+
+type projectsList struct {
+	Projects []struct {
+		Domain_id string `json:"domain_id"` //"default",
+		Enabled   bool   `json:"enabled"`   //true,
+		Id        string `json:"id"`        //"0c4e939acacf4376bdcd1129f1a054ad",
+		Name      string `json:"name"`      //"admin",
+	} `json:"projects"`
+}
+
+func getProjects(client *gophercloud.ServiceClient) projectsList {
+	body := serviceGet(client, "projects")
+	var c projectsList
+	err := json.Unmarshal(body, &c)
+	failOnError("Failed unmarshalling projects:\n", err)
+	return c
 }
 
 type accountInfo struct {
@@ -136,7 +172,7 @@ type rabbitPayload struct {
 
 func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, provider *gophercloud.ProviderClient) {
 	defer wg.Done()
-	accountUrl := strings.Join([]string{objectStoreURL, "v1/AUTH_", tenantID}, "")
+	accountUrl := strings.Join([]string{objectStoreURL, "/v1/AUTH_", tenantID}, "")
 	var max_retries int = 1
 	for i := 0; i <= max_retries; i++ {
 		resp, err := provider.Request("GET", accountUrl, gophercloud.RequestOpts{OkCodes: []int{200}})
@@ -177,6 +213,16 @@ func aggregateResponses(results <-chan accountInfo) []accountInfo {
 	return s
 }
 
+type rabbitCreds struct {
+	host        string
+	user        string
+	password    string
+	vhost       string
+	exchange    string
+	routing_key string
+	uri         string
+}
+
 func readConfig(configPath string, logLevel string) (string, gophercloud.AuthOptions, rabbitCreds) {
 
 	parsedLogLevel, err := logrus.ParseLevel(logLevel)
@@ -191,7 +237,7 @@ func readConfig(configPath string, logLevel string) (string, gophercloud.AuthOpt
 	checkConfig()
 	log.Debug("Config used:\n", viper.AllSettings())
 
-	regionName := viper.GetString("os_regionName")
+	regionName := viper.GetString("os_region_name")
 
 	opts := gophercloud.AuthOptions{
 		IdentityEndpoint: viper.GetString("credentials.keystone_uri"),
@@ -224,35 +270,38 @@ func main() {
 	failOnError("Error creating provider:\n", err)
 
 	idClient := openstack.NewIdentityV3(provider)
-	tenantList := getTenants(idClient)
+	//tenantList := getTenants(idClient)
+	pList := getProjects(idClient)
+	projects := pList.Projects
+	log.Debug(projects)
 
-	// objectStoreURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{Type: "object-store", Region: regionName, Availability: gophercloud.AvailabilityAdmin})
-
-	objectStoreURl, err := getEndpoint(idClient, "object-store", regionName)
-	failOnError("Error retrieving object store admin url:\n", err)
+	objectStoreURL := getEndpoint(idClient, "object-store", regionName, "admin")
 	log.Debug("Object store url:\n", objectStoreURL)
-	//TODO delete this return
-	return
+
 	// Buffered chan can take all the answers
-	results := make(chan accountInfo, len(tenantList))
+	results := make(chan accountInfo, len(projects))
 	var wg sync.WaitGroup
 	start := time.Now()
-	for _, tenant := range tenantList {
+	for _, project := range projects {
 		wg.Add(1)
-		go getAccountInfo(objectStoreURL, tenant.ID, results, &wg, provider)
+		time.Sleep(1 * time.Millisecond)
+		go getAccountInfo(objectStoreURL, project.Id, results, &wg, provider)
 	}
 	log.Debug("All jobs launched !")
 	wg.Wait()
-	log.Debug("Processed ", len(tenantList), " tenants in ", time.Since(start))
+	log.Debug("Processed ", len(projects), " tenants in ", time.Since(start))
 	log.Debug("All jobs done")
 	close(results)
 	respList := aggregateResponses(results)
+
 	output := rabbitPayload{}
 	output.Args.Data = respList
 	rbMsg, _ := json.Marshal(output)
 	log.Debug("Created ", len(rbMsg), "B length body:\n", string(rbMsg))
-	log.Debug("Connecting to:\n", rabbitCreds.uri)
+	//FIXME: return is for test purposes
+	return
 
+	log.Debug("Connecting to:\n", rabbitCreds.uri)
 	conn, err := amqp.Dial(rabbitCreds.uri)
 	failOnError("Failed to connect to RabbitMQ", err)
 	defer conn.Close()
