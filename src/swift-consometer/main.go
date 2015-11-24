@@ -302,11 +302,12 @@ func main() {
 	// Buffered chan can take all the answers
 	results := make(chan accountInfo, len(projects))
 	failedAccounts := make(chan map[error]string, len(projects))
+	limiter := time.Tick(time.Millisecond * 20)
 	var wg sync.WaitGroup
 	start := time.Now()
 	for _, project := range projects {
 		wg.Add(1)
-		time.Sleep(10 * time.Millisecond)
+		<-limiter
 		go getAccountInfo(objectStoreURL, project.Id, results, &wg, provider, failedAccounts)
 	}
 	log.Info("All jobs launched !")
