@@ -170,20 +170,22 @@ type rabbitPayload struct {
 	} `json:"args"`
 }
 
-func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, provider *gophercloud.ProviderClient) {
+func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, provider *gophercloud.ProviderClient, failedAccounts chan<- map[string]error) {
 	defer wg.Done()
 	accountUrl := strings.Join([]string{objectStoreURL, "/v1/AUTH_", tenantID}, "")
-	var max_retries int = 1
+	var max_retries int = 2
 	for i := 0; i <= max_retries; i++ {
 		resp, err := provider.Request("GET", accountUrl, gophercloud.RequestOpts{OkCodes: []int{200}})
 		if err != nil {
-			if i == max_retries {
-				log.Error("Failed to fetch account info: ", err)
+			if i < max_retries {
+				log.Warn(err, " Retry ", i)
+				time.Sleep(50 * time.Millisecond)
 				continue
+			} else {
+				log.Error(err)
+				failedAccounts <- map[string]error{tenantID: err}
+				return
 			}
-			log.Warn("Failed to fetch account info :", err, "  Retrying(", i, ")")
-			time.Sleep(100 * time.Millisecond)
-			continue
 		}
 		ai := accountInfo{
 			Counter_name:      "storage.objects.size",
@@ -234,8 +236,8 @@ func readConfig(configPath string, logLevel string) (string, gophercloud.AuthOpt
 	viper.AddConfigPath(configPath)
 	err = viper.ReadInConfig()
 	failOnError("Error reading config file:\n", err)
+	log.Debug("Config read:\n", viper.AllSettings())
 	checkConfig()
-	log.Debug("Config used:\n", viper.AllSettings())
 
 	regionName := viper.GetString("os_region_name")
 
@@ -270,9 +272,9 @@ func main() {
 	failOnError("Error creating provider:\n", err)
 
 	idClient := openstack.NewIdentityV3(provider)
-	//tenantList := getTenants(idClient)
 	pList := getProjects(idClient)
 	projects := pList.Projects
+	log.Info("Number of projects fetched: ", len(projects))
 	log.Debug(projects)
 
 	objectStoreURL := getEndpoint(idClient, "object-store", regionName, "admin")
@@ -280,18 +282,22 @@ func main() {
 
 	// Buffered chan can take all the answers
 	results := make(chan accountInfo, len(projects))
+	failedAccounts := make(chan map[string]error, len(projects))
 	var wg sync.WaitGroup
 	start := time.Now()
 	for _, project := range projects {
 		wg.Add(1)
-		time.Sleep(1 * time.Millisecond)
-		go getAccountInfo(objectStoreURL, project.Id, results, &wg, provider)
+		time.Sleep(2 * time.Millisecond)
+		go getAccountInfo(objectStoreURL, project.Id, results, &wg, provider, failedAccounts)
 	}
-	log.Debug("All jobs launched !")
+	log.Info("All jobs launched !")
 	wg.Wait()
-	log.Debug("Processed ", len(projects), " tenants in ", time.Since(start))
-	log.Debug("All jobs done")
+	log.Info("Processed ", len(projects), " tenants in ", time.Since(start))
+	if len(failedAccounts) > 0 {
+		log.Error("Number of accounts failed: ", len(failedAccounts))
+	}
 	close(results)
+	close(failedAccounts)
 	respList := aggregateResponses(results)
 
 	output := rabbitPayload{}
@@ -301,7 +307,7 @@ func main() {
 	//FIXME: return is for test purposes
 	return
 
-	log.Debug("Connecting to:\n", rabbitCreds.uri)
+	log.Info("Connecting to:\n", rabbitCreds.uri)
 	conn, err := amqp.Dial(rabbitCreds.uri)
 	failOnError("Failed to connect to RabbitMQ", err)
 	defer conn.Close()
@@ -319,6 +325,6 @@ func main() {
 			Body:        []byte(rbMsg),
 		})
 	failOnError("Failed to publish the message:\n", err)
-	log.Debug("Message sent!")
+	log.Info("Message sent!")
 	return
 }
