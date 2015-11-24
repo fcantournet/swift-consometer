@@ -170,20 +170,20 @@ type rabbitPayload struct {
 	} `json:"args"`
 }
 
-func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, provider *gophercloud.ProviderClient, failedAccounts chan<- map[string]error) {
+func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
 	defer wg.Done()
 	accountUrl := strings.Join([]string{objectStoreURL, "/v1/AUTH_", tenantID}, "")
 	var max_retries int = 2
 	for i := 0; i <= max_retries; i++ {
-		resp, err := provider.Request("GET", accountUrl, gophercloud.RequestOpts{OkCodes: []int{200}})
+		resp, err := provider.Request("HEAD", accountUrl, gophercloud.RequestOpts{OkCodes: []int{204, 200, 404}})
 		if err != nil {
 			if i < max_retries {
-				log.Warn(err, " Retry ", i)
-				time.Sleep(50 * time.Millisecond)
+				log.Warn(err, " Retry ", i+1)
+				time.Sleep(100 * time.Millisecond)
 				continue
 			} else {
 				log.Error(err)
-				failedAccounts <- map[string]error{tenantID: err}
+				failedAccounts <- map[error]string{err: tenantID}
 				return
 			}
 		}
@@ -211,6 +211,22 @@ func aggregateResponses(results <-chan accountInfo) []accountInfo {
 	var s []accountInfo
 	for result := range results {
 		s = append(s, result)
+	}
+	return s
+}
+
+func countErrors(failed <-chan map[error]string) map[string]int {
+	c := make(map[string][]string)
+	s := make(map[string]int)
+	for failure := range failed {
+		for errkey, _ := range failure {
+			strkey := strings.SplitN(errkey.Error(), ":", 4)
+			key := strkey[len(strkey)-1]
+			c[key] = append(c[key], failure[errkey])
+		}
+	}
+	for key, _ := range c {
+		s[key] = len(c[key])
 	}
 	return s
 }
@@ -282,7 +298,7 @@ func main() {
 
 	// Buffered chan can take all the answers
 	results := make(chan accountInfo, len(projects))
-	failedAccounts := make(chan map[string]error, len(projects))
+	failedAccounts := make(chan map[error]string, len(projects))
 	var wg sync.WaitGroup
 	start := time.Now()
 	for _, project := range projects {
@@ -293,19 +309,23 @@ func main() {
 	log.Info("All jobs launched !")
 	wg.Wait()
 	log.Info("Processed ", len(projects), " tenants in ", time.Since(start))
-	if len(failedAccounts) > 0 {
-		log.Error("Number of accounts failed: ", len(failedAccounts))
-	}
 	close(results)
 	close(failedAccounts)
+	if len(failedAccounts) > 0 {
+		log.Error("Number of accounts failed: ", len(failedAccounts))
+		errorsCounted := countErrors(failedAccounts)
+		log.Error(errorsCounted)
+	}
+
+	//FIXME: return is for test purposes
+	return
+
 	respList := aggregateResponses(results)
 
 	output := rabbitPayload{}
 	output.Args.Data = respList
 	rbMsg, _ := json.Marshal(output)
 	log.Debug("Created ", len(rbMsg), "B length body:\n", string(rbMsg))
-	//FIXME: return is for test purposes
-	return
 
 	log.Info("Connecting to:\n", rabbitCreds.uri)
 	conn, err := amqp.Dial(rabbitCreds.uri)
