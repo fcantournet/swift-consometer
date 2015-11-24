@@ -67,15 +67,15 @@ type servicesCatalog struct {
 		Enabled     bool   `json:"enabled"`     //true
 		Id          string `json:"id"`          //"1999c3a858c7408fb586817620695098"
 		Links       struct {
-			self string `json:"self"`
+			Self string `json:"self"`
 		} `json:"links"`
 		Name string `json:"name"` //"nova"
 		Type string `json:"type"` // compute"
 	} `json:"Services"`
 	Links struct {
-		self     string  `json:"self"`
-		previous *string `json:"previous"`
-		next     *string `json:"next"`
+		Self     string  `json:"self"`
+		Previous *string `json:"previous"`
+		Next     *string `json:"next"`
 	} `json:"links"`
 }
 
@@ -99,7 +99,7 @@ func getServiceId(client *gophercloud.ServiceClient, serviceType string) string 
 type endpointsCatalog struct {
 	Endpoints []struct {
 		Links struct {
-			self string `json:"self"`
+			Self string `json:"self"`
 		} `json:"links"`
 		Url        string `json:"url"`
 		Region     string `json:"region"`
@@ -109,9 +109,9 @@ type endpointsCatalog struct {
 		Id         string `json:"id"`
 	} `json:"endpoints"`
 	Links struct {
-		self     string  `json:"self"`
-		previous *string `json:"previous"`
-		next     *string `json:"next"`
+		Self     string  `json:"self"`
+		Previous *string `json:"previous"`
+		Next     *string `json:"next"`
 	} `json:"links"`
 }
 
@@ -228,6 +228,9 @@ func countErrors(failed <-chan map[error]string) map[string]int {
 	for key, _ := range c {
 		s[key] = len(c[key])
 	}
+	for key, _ := range s {
+		log.Error(key, "  #", s[key], "#")
+	}
 	return s
 }
 
@@ -303,7 +306,7 @@ func main() {
 	start := time.Now()
 	for _, project := range projects {
 		wg.Add(1)
-		time.Sleep(2 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		go getAccountInfo(objectStoreURL, project.Id, results, &wg, provider, failedAccounts)
 	}
 	log.Info("All jobs launched !")
@@ -313,8 +316,7 @@ func main() {
 	close(failedAccounts)
 	if len(failedAccounts) > 0 {
 		log.Error("Number of accounts failed: ", len(failedAccounts))
-		errorsCounted := countErrors(failedAccounts)
-		log.Error(errorsCounted)
+		countErrors(failedAccounts)
 	}
 
 	//FIXME: return is for test purposes
