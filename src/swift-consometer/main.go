@@ -343,7 +343,7 @@ func main() {
 	}
 	log.Info("All jobs launched !")
 	wg.Wait()
-	log.Info("Processed ", len(projects), " tenants in ", time.Since(start))
+	log.Info("Processed ", len(results), " tenants in ", time.Since(start))
 	close(results)
 	close(failedAccounts)
 	close(sem)
