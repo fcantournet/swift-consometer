@@ -12,17 +12,17 @@ import (
 )
 
 type accountInfo struct {
-	Counter_name      string  `json:"counter_name"`       //"storage.objects.size",
-	Resource_id       string  `json:"resource_id"`        //"d5bbc7c06c9e479dbb91912c045cdeab",
-	Message_id        string  `json:"message_id"`         //"1",
-	Timestamp         string  `json:"timestamp"`          // "2013-05-13T14:03:01Z",
-	Counter_volume    string  `json:"counter_volume"`     // "0",
-	User_id           *string `json:"user_id"`            // null,
-	Source            string  `json:"source"`             // "openstack",
-	Counter_unit      string  `json:"counter_unit"`       // "B",
-	Project_id        string  `json:"project_id"`         // "d5bbc7c06c9e479dbb91912c045cdeab",
-	Counter_type      string  `json:"counter_type"`       // "gauge",
-	Resource_metadata *string `json:"ressource_metadata"` // null
+	CounterName      string  `json:"counter_name"`       //"storage.objects.size",
+	ResourceID       string  `json:"resource_id"`        //"d5bbc7c06c9e479dbb91912c045cdeab",
+	MessageID        string  `json:"message_id"`         //"1",
+	Timestamp        string  `json:"timestamp"`          // "2013-05-13T14:03:01Z",
+	CounterVolume    string  `json:"counter_volume"`     // "0",
+	UserID           *string `json:"user_id"`            // null,
+	Source           string  `json:"source"`             // "openstack",
+	CounterUnit      string  `json:"counter_unit"`       // "B",
+	ProjectID        string  `json:"project_id"`         // "d5bbc7c06c9e479dbb91912c045cdeab",
+	CounterType      string  `json:"counter_type"`       // "gauge",
+	ResourceMetadata *string `json:"ressource_metadata"` // null
 }
 
 type rabbitPayload struct {
@@ -34,12 +34,12 @@ type rabbitPayload struct {
 func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, sem <-chan bool, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
 	defer wg.Done()
 	defer func() { <-sem }()
-	accountUrl := strings.Join([]string{objectStoreURL, "/v1/AUTH_", tenantID}, "")
-	var max_retries int = 2
-	for i := 0; i <= max_retries; i++ {
-		resp, err := provider.Request("HEAD", accountUrl, gophercloud.RequestOpts{OkCodes: []int{204, 200}})
+	accountURL := strings.Join([]string{objectStoreURL, "/v1/AUTH_", tenantID}, "")
+	var maxRetries = 2
+	for i := 0; i <= maxRetries; i++ {
+		resp, err := provider.Request("HEAD", accountURL, gophercloud.RequestOpts{OkCodes: []int{204, 200}})
 		if err != nil {
-			if i < max_retries {
+			if i < maxRetries {
 				log.Warn(err, " Retry ", i+1)
 				time.Sleep(100 * time.Millisecond)
 				continue
@@ -50,19 +50,19 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 			}
 		}
 		ai := accountInfo{
-			Counter_name:      "storage.objects.size",
-			Resource_id:       tenantID,
-			Message_id:        "1",
-			Timestamp:         resp.Header.Get("x-timestamp"),
-			Counter_volume:    resp.Header.Get("x-account-bytes-used"),
-			User_id:           nil,
-			Source:            "openstack",
-			Counter_unit:      "B",
-			Project_id:        tenantID,
-			Counter_type:      "gauge",
-			Resource_metadata: nil,
+			CounterName:      "storage.objects.size",
+			ResourceID:       tenantID,
+			MessageID:        "1",
+			Timestamp:        resp.Header.Get("x-timestamp"),
+			CounterVolume:    resp.Header.Get("x-account-bytes-used"),
+			UserID:           nil,
+			Source:           "openstack",
+			CounterUnit:      "B",
+			ProjectID:        tenantID,
+			CounterType:      "gauge",
+			ResourceMetadata: nil,
 		}
-		log.Debug("Fetched account: ", accountUrl)
+		log.Debug("Fetched account: ", accountURL)
 		results <- ai
 		return
 	}
@@ -76,9 +76,9 @@ func aggregateResponses(results <-chan accountInfo) []accountInfo {
 	}
 	return s
 }
-func rabbitSend(rabbit RabbitCreds, rbMsg []byte) {
-	log.Info("Connecting to:\n", rabbit.uri)
-	conn, err := amqp.Dial(rabbit.uri)
+func rabbitSend(rabbit rabbitCreds, rbMsg []byte) {
+	log.Info("Connecting to:\n", rabbit.URI)
+	conn, err := amqp.Dial(rabbit.URI)
 	failOnError("Failed to connect to RabbitMQ", err)
 	defer conn.Close()
 	ch, err := conn.Channel()
@@ -86,10 +86,10 @@ func rabbitSend(rabbit RabbitCreds, rbMsg []byte) {
 	defer ch.Close()
 
 	err = ch.Publish(
-		rabbit.exchange,    // exchange
-		rabbit.routing_key, // routing key
-		false,              // mandatory
-		false,              // immediate
+		rabbit.Exchange,   // exchange
+		rabbit.RoutingKey, // routing key
+		false,             // mandatory
+		false,             // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        []byte(rbMsg),
@@ -104,11 +104,11 @@ func main() {
 	logLevel := flag.String("l", "", "Set log level {info, debug, warn, error, panic}. Default is info.")
 	flag.Parse()
 
-	config := readConfig(*configPath, *logLevel)
-	regionName := config.credentials.openstack.os_region_name
-	opts := config.credentials.openstack.authOptions
-	rabbitCreds := config.credentials.rabbit
-	concurrency := config.concurrency
+	conf := readConfig(*configPath, *logLevel)
+	regionName := conf.Credentials.Openstack.OsRegionName
+	opts := conf.Credentials.Openstack.AuthOptions
+	rabbitCreds := conf.Credentials.Rabbit
+	concurrency := conf.Concurrency
 
 	provider, err := openstack.AuthenticatedClient(opts)
 	failOnError("Error creating provider:\n", err)
@@ -133,7 +133,7 @@ func main() {
 	for _, project := range projects {
 		wg.Add(1)
 		sem <- true
-		go getAccountInfo(objectStoreURL, project.Id, results, &wg, sem, provider, failedAccounts)
+		go getAccountInfo(objectStoreURL, project.ID, results, &wg, sem, provider, failedAccounts)
 	}
 	wg.Wait()
 	log.Info("Processed ", len(results), " tenants in ", time.Since(start))

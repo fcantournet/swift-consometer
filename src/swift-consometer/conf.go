@@ -31,29 +31,29 @@ func checkConfigFile() {
 	}
 }
 
-type RabbitCreds struct {
-	host        string
-	user        string
-	password    string
-	vhost       string
-	exchange    string
-	routing_key string
-	uri         string
+type rabbitCreds struct {
+	Host       string
+	User       string
+	Password   string
+	Vhost      string
+	Exchange   string
+	RoutingKey string
+	URI        string
 }
 
-type Config struct {
-	credentials struct {
-		rabbit    RabbitCreds
-		openstack struct {
-			authOptions    gophercloud.AuthOptions
-			os_region_name string
+type config struct {
+	Credentials struct {
+		Rabbit    rabbitCreds
+		Openstack struct {
+			AuthOptions  gophercloud.AuthOptions
+			OsRegionName string
 		}
 	}
-	concurrency int
-	log_level   string
+	Concurrency int
+	LogLevel    string
 }
 
-func readConfig(configPath string, logLevel string) Config {
+func readConfig(configPath string, logLevel string) config {
 	viper.SetConfigType("yaml")
 	viper.SetConfigName("consometer")
 	viper.AddConfigPath(configPath)
@@ -61,8 +61,8 @@ func readConfig(configPath string, logLevel string) Config {
 	failOnError("Error reading config file:\n", err)
 	checkConfigFile()
 
-	var config Config
-	config.credentials.openstack.os_region_name = viper.GetString("credentials.openstack.os_region_name")
+	var conf config
+	conf.Credentials.Openstack.OsRegionName = viper.GetString("credentials.openstack.os_region_name")
 
 	opts := gophercloud.AuthOptions{
 		IdentityEndpoint: viper.GetString("credentials.openstack.keystone_uri"),
@@ -70,32 +70,32 @@ func readConfig(configPath string, logLevel string) Config {
 		Password:         viper.GetString("credentials.openstack.swift_conso_password"),
 		TenantName:       viper.GetString("credentials.openstack.swift_conso_tenant"),
 	}
-	config.credentials.openstack.authOptions = opts
+	conf.Credentials.Openstack.AuthOptions = opts
 
-	rabbit := RabbitCreds{
-		host:        viper.GetString("credentials.rabbit.host"),
-		user:        viper.GetString("credentials.rabbit.user"),
-		password:    viper.GetString("credentials.rabbit.password"),
-		vhost:       viper.GetString("credentials.rabbit.vhost"),
-		exchange:    viper.GetString("credentials.rabbit.exchange"),
-		routing_key: viper.GetString("credentials.rabbit.routing_key"),
+	rabbit := rabbitCreds{
+		Host:       viper.GetString("credentials.rabbit.host"),
+		User:       viper.GetString("credentials.rabbit.user"),
+		Password:   viper.GetString("credentials.rabbit.password"),
+		Vhost:      viper.GetString("credentials.rabbit.vhost"),
+		Exchange:   viper.GetString("credentials.rabbit.exchange"),
+		RoutingKey: viper.GetString("credentials.rabbit.routing_key"),
 	}
-	rabbit.uri = strings.Join([]string{"amqp://", rabbit.user, ":", rabbit.password, "@", rabbit.host, "/", rabbit.vhost}, "")
-	config.credentials.rabbit = rabbit
+	rabbit.URI = strings.Join([]string{"amqp://", rabbit.User, ":", rabbit.Password, "@", rabbit.Host, "/", rabbit.Vhost}, "")
+	conf.Credentials.Rabbit = rabbit
 
-	config.concurrency = viper.GetInt("concurrency")
+	conf.Concurrency = viper.GetInt("concurrency")
 
-	config.log_level = viper.GetString("log_level")
+	conf.LogLevel = viper.GetString("log_level")
 	if logLevel != "" {
 		parsedLogLevel, err := logrus.ParseLevel(logLevel)
 		failOnError("Bad log level:\n", err)
 		log.Level = parsedLogLevel
 	} else {
-		parsedLogLevel, err := logrus.ParseLevel(config.log_level)
+		parsedLogLevel, err := logrus.ParseLevel(conf.LogLevel)
 		failOnError("Bad log level:\n", err)
 		log.Level = parsedLogLevel
 	}
 	log.Debug("Config read:\n", viper.AllSettings())
 
-	return config
+	return conf
 }

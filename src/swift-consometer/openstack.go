@@ -30,7 +30,7 @@ type servicesCatalog struct {
 	Services []struct {
 		Description string `json:"description"` //"Nova Compute Service"
 		Enabled     bool   `json:"enabled"`     //true
-		Id          string `json:"id"`          //"1999c3a858c7408fb586817620695098"
+		ID          string `json:"id"`          //"1999c3a858c7408fb586817620695098"
 		Links       struct {
 			Self string `json:"self"`
 		} `json:"links"`
@@ -44,7 +44,7 @@ type servicesCatalog struct {
 	} `json:"links"`
 }
 
-func getServiceId(client *gophercloud.ServiceClient, serviceType string) string {
+func getServiceID(client *gophercloud.ServiceClient, serviceType string) string {
 	body := serviceGet(client, "services")
 	var c servicesCatalog
 	err := json.Unmarshal(body, &c)
@@ -52,7 +52,7 @@ func getServiceId(client *gophercloud.ServiceClient, serviceType string) string 
 	var result []string
 	for _, service := range c.Services {
 		if service.Type == serviceType {
-			result = append(result, service.Id)
+			result = append(result, service.ID)
 		}
 	}
 	if len(result) > 1 {
@@ -66,12 +66,12 @@ type endpointsCatalog struct {
 		Links struct {
 			Self string `json:"self"`
 		} `json:"links"`
-		Url        string `json:"url"`
-		Region     string `json:"region"`
-		Enabled    bool   `json:"enabled"`
-		Interface  string `json:"interface"`
-		Service_id string `json:"service_id"`
-		Id         string `json:"id"`
+		URL       string `json:"url"`
+		Region    string `json:"region"`
+		Enabled   bool   `json:"enabled"`
+		Interface string `json:"interface"`
+		ServiceID string `json:"service_id"`
+		ID        string `json:"id"`
 	} `json:"endpoints"`
 	Links struct {
 		Self     string  `json:"self"`
@@ -85,11 +85,11 @@ func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region s
 	var c endpointsCatalog
 	err := json.Unmarshal(body, &c)
 	failOnError("Failed unmarshalling endpoint catalog:\n", err)
-	serviceId := getServiceId(client, serviceType)
+	serviceID := getServiceID(client, serviceType)
 	var result []string
 	for _, endpoint := range c.Endpoints {
-		if endpoint.Region == region && endpoint.Service_id == serviceId && endpoint.Interface == eInterface {
-			result = append(result, endpoint.Url)
+		if endpoint.Region == region && endpoint.ServiceID == serviceID && endpoint.Interface == eInterface {
+			result = append(result, endpoint.URL)
 		}
 	}
 	if len(result) > 1 {
@@ -100,10 +100,10 @@ func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region s
 
 type projectsList struct {
 	Projects []struct {
-		Domain_id string `json:"domain_id"` //"default",
-		Enabled   bool   `json:"enabled"`   //true,
-		Id        string `json:"id"`        //"0c4e939acacf4376bdcd1129f1a054ad",
-		Name      string `json:"name"`      //"admin",
+		DomainID string `json:"domain_id"` //"default",
+		Enabled  bool   `json:"enabled"`   //true,
+		ID       string `json:"id"`        //"0c4e939acacf4376bdcd1129f1a054ad",
+		Name     string `json:"name"`      //"admin",
 	} `json:"projects"`
 }
 
