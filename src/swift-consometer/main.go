@@ -178,7 +178,7 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 	accountUrl := strings.Join([]string{objectStoreURL, "/v1/AUTH_", tenantID}, "")
 	var max_retries int = 2
 	for i := 0; i <= max_retries; i++ {
-		resp, err := provider.Request("HEAD", accountUrl, gophercloud.RequestOpts{OkCodes: []int{204, 200, 404}})
+		resp, err := provider.Request("HEAD", accountUrl, gophercloud.RequestOpts{OkCodes: []int{204, 200}})
 		if err != nil {
 			if i < max_retries {
 				log.Warn(err, " Retry ", i+1)
