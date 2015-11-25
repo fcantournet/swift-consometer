@@ -170,8 +170,9 @@ type rabbitPayload struct {
 	} `json:"args"`
 }
 
-func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
+func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, sem <-chan bool, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
 	defer wg.Done()
+	defer func() { <-sem }()
 	accountUrl := strings.Join([]string{objectStoreURL, "/v1/AUTH_", tenantID}, "")
 	var max_retries int = 2
 	for i := 0; i <= max_retries; i++ {
@@ -302,19 +303,22 @@ func main() {
 	// Buffered chan can take all the answers
 	results := make(chan accountInfo, len(projects))
 	failedAccounts := make(chan map[error]string, len(projects))
-	limiter := time.Tick(time.Millisecond * 20)
+	concurrency := 600
+	sem := make(chan bool, concurrency)
+
 	var wg sync.WaitGroup
 	start := time.Now()
 	for _, project := range projects {
 		wg.Add(1)
-		<-limiter
-		go getAccountInfo(objectStoreURL, project.Id, results, &wg, provider, failedAccounts)
+		sem <- true
+		go getAccountInfo(objectStoreURL, project.Id, results, &wg, sem, provider, failedAccounts)
 	}
 	log.Info("All jobs launched !")
 	wg.Wait()
 	log.Info("Processed ", len(projects), " tenants in ", time.Since(start))
 	close(results)
 	close(failedAccounts)
+	close(sem)
 	if len(failedAccounts) > 0 {
 		log.Error("Number of accounts failed: ", len(failedAccounts))
 		countErrors(failedAccounts)
