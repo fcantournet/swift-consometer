@@ -76,6 +76,28 @@ func aggregateResponses(results <-chan accountInfo) []accountInfo {
 	}
 	return s
 }
+func rabbitSend(rabbit RabbitCreds, rbMsg []byte) {
+	log.Info("Connecting to:\n", rabbit.uri)
+	conn, err := amqp.Dial(rabbit.uri)
+	failOnError("Failed to connect to RabbitMQ", err)
+	defer conn.Close()
+	ch, err := conn.Channel()
+	failOnError("Failed to open a channel", err)
+	defer ch.Close()
+
+	err = ch.Publish(
+		rabbit.exchange,    // exchange
+		rabbit.routing_key, // routing key
+		false,              // mandatory
+		false,              // immediate
+		amqp.Publishing{
+			ContentType: "application/json",
+			Body:        []byte(rbMsg),
+		})
+	failOnError("Failed to publish the message:\n", err)
+	log.Info("Message sent!")
+	return
+}
 
 func main() {
 	configPath := flag.String("config", "./etc/swift", "Path of the configuration file directory.")
@@ -131,26 +153,8 @@ func main() {
 	output := rabbitPayload{}
 	output.Args.Data = respList
 	rbMsg, _ := json.Marshal(output)
-	log.Debug("Created ", len(rbMsg), "B length body:\n", string(rbMsg))
-
-	log.Info("Connecting to:\n", rabbitCreds.uri)
-	conn, err := amqp.Dial(rabbitCreds.uri)
-	failOnError("Failed to connect to RabbitMQ", err)
-	defer conn.Close()
-	ch, err := conn.Channel()
-	failOnError("Failed to open a channel", err)
-	defer ch.Close()
-
-	err = ch.Publish(
-		rabbitCreds.exchange,    // exchange
-		rabbitCreds.routing_key, // routing key
-		false, // mandatory
-		false, // immediate
-		amqp.Publishing{
-			ContentType: "application/json",
-			Body:        []byte(rbMsg),
-		})
-	failOnError("Failed to publish the message:\n", err)
-	log.Info("Message sent!")
+	log.Info("Created ", len(rbMsg), "B length body")
+	log.Debug(string(rbMsg))
+	rabbitSend(rabbitCreds, rbMsg)
 	return
 }
