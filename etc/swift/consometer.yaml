@@ -1,13 +1,16 @@
 credentials:
-  keystone_uri: "http://identity.fr1.cloudwatt.com:5000"
-  swift_conso_tenant: "conso"
-  swift_conso_user: "swift-consometer"
-  swift_conso_password: "yolo"
-rabbit:
-  host: "d-msqcld-0000.usr.lab0.aub.cloudwatt.net:5672"
-  userid: "ceilometer"
-  password: "yolobob"
-  vhost: "openstack"
-  exchange: "ceilometr"
-  routing_key: "metering"
-os_region_name: "fr1"
+  openstack:
+    keystone_uri: "http://identity.fr1.cloudwatt.com:5000"
+    swift_conso_tenant: "conso"
+    swift_conso_user: "swift-consometer"
+    swift_conso_password: "yolo"
+    os_region_name: "fr1"
+  rabbit:
+    host: "d-msqcld-0000.usr.lab0.aub.cloudwatt.net:5672"
+    userid: "ceilometer"
+    password: "yolobob"
+    vhost: "openstack"
+    exchange: "ceilometr"
+    routing_key: "metering"
+concurrency: 600
+log_level: "info"

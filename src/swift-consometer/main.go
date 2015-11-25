@@ -17,22 +17,24 @@ import (
 
 var log = logrus.New()
 
-func checkConfig() {
-	mandatoryKeys := []string{"credentials.keystone_uri",
-		"credentials.swift_conso_user",
-		"credentials.swift_conso_password",
-		"credentials.swift_conso_tenant",
-		"rabbit.host",
-		"rabbit.user",
-		"rabbit.password",
-		"rabbit.exchange",
-		"rabbit.routing_key",
-		"rabbit.vhost",
-		"os_region_name"}
+func checkConfigFile() {
+	mandatoryKeys := []string{"credentials.openstack.keystone_uri",
+		"credentials.openstack.swift_conso_user",
+		"credentials.openstack.swift_conso_password",
+		"credentials.openstack.swift_conso_tenant",
+		"credentials.rabbit.host",
+		"credentials.rabbit.user",
+		"credentials.rabbit.password",
+		"credentials.rabbit.exchange",
+		"credentials.rabbit.routing_key",
+		"credentials.rabbit.vhost",
+		"credentials.openstack.os_region_name",
+		"concurrency",
+		"log_level"}
 
 	for _, key := range mandatoryKeys {
 		if !viper.IsSet(key) {
-			log.Fatal("Incomplete Config. Missing: ", key)
+			log.Fatal("Incomplete configuration. Missing: ", key)
 		}
 	}
 }
@@ -235,7 +237,7 @@ func countErrors(failed <-chan map[error]string) map[string]int {
 	return s
 }
 
-type rabbitCreds struct {
+type RabbitCreds struct {
 	host        string
 	user        string
 	password    string
@@ -245,48 +247,75 @@ type rabbitCreds struct {
 	uri         string
 }
 
-func readConfig(configPath string, logLevel string) (string, gophercloud.AuthOptions, rabbitCreds) {
+type Config struct {
+	credentials struct {
+		rabbit    RabbitCreds
+		openstack struct {
+			authOptions    gophercloud.AuthOptions
+			os_region_name string
+		}
+	}
+	concurrency int
+	log_level   string
+}
 
-	parsedLogLevel, err := logrus.ParseLevel(logLevel)
-	failOnError("Bad log level:\n", err)
-	log.Level = parsedLogLevel
-
+func readConfig(configPath string, logLevel string) Config {
 	viper.SetConfigType("yaml")
 	viper.SetConfigName("consometer")
 	viper.AddConfigPath(configPath)
-	err = viper.ReadInConfig()
+	err := viper.ReadInConfig()
 	failOnError("Error reading config file:\n", err)
-	log.Debug("Config read:\n", viper.AllSettings())
-	checkConfig()
+	checkConfigFile()
 
-	regionName := viper.GetString("os_region_name")
+	var config Config
+	config.credentials.openstack.os_region_name = viper.GetString("credentials.openstack.os_region_name")
 
 	opts := gophercloud.AuthOptions{
-		IdentityEndpoint: viper.GetString("credentials.keystone_uri"),
-		Username:         viper.GetString("credentials.swift_conso_user"),
-		Password:         viper.GetString("credentials.swift_conso_password"),
-		TenantName:       viper.GetString("credentials.swift_conso_tenant"),
+		IdentityEndpoint: viper.GetString("credentials.openstack.keystone_uri"),
+		Username:         viper.GetString("credentials.openstack.swift_conso_user"),
+		Password:         viper.GetString("credentials.openstack.swift_conso_password"),
+		TenantName:       viper.GetString("credentials.openstack.swift_conso_tenant"),
 	}
+	config.credentials.openstack.authOptions = opts
 
-	creds := rabbitCreds{
-		host:        viper.GetString("rabbit.host"),
-		user:        viper.GetString("rabbit.user"),
-		password:    viper.GetString("rabbit.password"),
-		vhost:       viper.GetString("rabbit.vhost"),
-		exchange:    viper.GetString("rabbit.exchange"),
-		routing_key: viper.GetString("rabbit.routing_key"),
+	rabbit := RabbitCreds{
+		host:        viper.GetString("credentials.rabbit.host"),
+		user:        viper.GetString("credentials.rabbit.user"),
+		password:    viper.GetString("credentials.rabbit.password"),
+		vhost:       viper.GetString("credentials.rabbit.vhost"),
+		exchange:    viper.GetString("credentials.rabbit.exchange"),
+		routing_key: viper.GetString("credentials.rabbit.routing_key"),
 	}
-	creds.uri = strings.Join([]string{"amqp://", creds.user, ":", creds.password, "@", creds.host, "/", creds.vhost}, "")
+	rabbit.uri = strings.Join([]string{"amqp://", rabbit.user, ":", rabbit.password, "@", rabbit.host, "/", rabbit.vhost}, "")
+	config.credentials.rabbit = rabbit
 
-	return regionName, opts, creds
+	config.concurrency = viper.GetInt("concurrency")
+
+	config.log_level = viper.GetString("log_level")
+	if logLevel != "" {
+		parsedLogLevel, err := logrus.ParseLevel(logLevel)
+		failOnError("Bad log level:\n", err)
+		log.Level = parsedLogLevel
+	} else {
+		parsedLogLevel, err := logrus.ParseLevel(config.log_level)
+		failOnError("Bad log level:\n", err)
+		log.Level = parsedLogLevel
+	}
+	log.Debug("Config read:\n", viper.AllSettings())
+
+	return config
 }
 
 func main() {
 	configPath := flag.String("config", "./etc/swift", "Path of the configuration file directory.")
-	logLevel := flag.String("l", "info", "Set log level {info, debug, warn, error, panic}. Default is info.")
+	logLevel := flag.String("l", "", "Set log level {info, debug, warn, error, panic}. Default is info.")
 	flag.Parse()
 
-	regionName, opts, rabbitCreds := readConfig(*configPath, *logLevel)
+	config := readConfig(*configPath, *logLevel)
+	regionName := config.credentials.openstack.os_region_name
+	opts := config.credentials.openstack.authOptions
+	rabbitCreds := config.credentials.rabbit
+	concurrency := config.concurrency
 
 	provider, err := openstack.AuthenticatedClient(opts)
 	failOnError("Error creating provider:\n", err)
@@ -303,7 +332,6 @@ func main() {
 	// Buffered chan can take all the answers
 	results := make(chan accountInfo, len(projects))
 	failedAccounts := make(chan map[error]string, len(projects))
-	concurrency := 600
 	sem := make(chan bool, concurrency)
 
 	var wg sync.WaitGroup
