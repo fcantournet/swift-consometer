@@ -335,13 +335,13 @@ func main() {
 	sem := make(chan bool, concurrency)
 
 	var wg sync.WaitGroup
+	log.Info("Launching jobs")
 	start := time.Now()
 	for _, project := range projects {
 		wg.Add(1)
 		sem <- true
 		go getAccountInfo(objectStoreURL, project.Id, results, &wg, sem, provider, failedAccounts)
 	}
-	log.Info("All jobs launched !")
 	wg.Wait()
 	log.Info("Processed ", len(results), " tenants in ", time.Since(start))
 	close(results)
