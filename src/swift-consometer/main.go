@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"github.com/pborman/uuid"
 	"github.com/rackspace/gophercloud"
 	"github.com/rackspace/gophercloud/openstack"
 	"github.com/streadway/amqp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,11 +51,14 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 				return
 			}
 		}
+		timeint64, err := strconv.ParseInt(strings.Split(resp.Header.Get("x-timestamp"), ".")[0], 10, 64)
+		failOnError("Failed to convert string to int64:\n", err)
+		timestamp := time.Unix(timeint64, 0)
 		ai := accountInfo{
 			CounterName:      "storage.objects.size",
 			ResourceID:       tenantID,
-			MessageID:        "1",
-			Timestamp:        resp.Header.Get("x-timestamp"),
+			MessageID:        uuid.New(),
+			Timestamp:        timestamp.Format(time.RFC3339),
 			CounterVolume:    resp.Header.Get("x-account-bytes-used"),
 			UserID:           nil,
 			Source:           "openstack",
@@ -62,6 +67,7 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 			CounterType:      "gauge",
 			ResourceMetadata: nil,
 		}
+		log.Info(ai.MessageID)
 		log.Debug("Fetched account: ", accountURL)
 		results <- ai
 		return
@@ -145,8 +151,8 @@ func main() {
 		countErrors(failedAccounts)
 	}
 
-	//FIXME: return is for test purposes
-	return
+	//FIXME: return for debug
+	//	return
 
 	respList := aggregateResponses(results)
 

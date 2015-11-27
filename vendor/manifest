@@ -51,6 +51,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/pborman/uuid",
+			"repository": "https://github.com/pborman/uuid",
+			"revision": "cccd189d45f7ac3368a0d127efb7f4d08ae0b655",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/rackspace/gophercloud",
 			"repository": "https://github.com/rackspace/gophercloud",
 			"revision": "761cff8afb6a8e7f42c5554a90dae72f341bb481",
