@@ -67,7 +67,6 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 			CounterType:      "gauge",
 			ResourceMetadata: nil,
 		}
-		log.Info(ai.MessageID)
 		log.Debug("Fetched account: ", accountURL)
 		results <- ai
 		return
