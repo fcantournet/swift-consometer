@@ -80,13 +80,12 @@ func aggregateResponses(results <-chan accountInfo, chunkSize int) [][]accountIn
 			}
 			r = append(r, s)
 			return r
-		} else {
-			var s []accountInfo
-			for i := 0; i < chunkSize; i++ {
-				s = append(s, <-results)
-			}
-			r = append(r, s)
 		}
+		var s []accountInfo
+		for i := 0; i < chunkSize; i++ {
+			s = append(s, <-results)
+		}
+		r = append(r, s)
 	}
 }
 
@@ -112,7 +111,7 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 			})
 		failOnError("Failed to publish the message:\n", err)
 		log.Debug("Message ", nbSent, " out of ", len(rbMsgs), " sent")
-		nbSent += 1
+		nbSent++
 	}
 	log.Info("Messages sent!")
 	return
@@ -176,7 +175,7 @@ func main() {
 		rbMsg, _ := json.Marshal(output)
 		log.Debug("Created ", nmbMsgs, " out of ", len(respList), " message with ", len(rbMsg), "B length body")
 		log.Debug(string(rbMsg))
-		nmbMsgs += 1
+		nmbMsgs++
 		rbMsgs = append(rbMsgs, rbMsg)
 	}
 	rabbitSend(rabbitCreds, rbMsgs)
