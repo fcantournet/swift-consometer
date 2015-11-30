@@ -167,7 +167,7 @@ func main() {
 	//FIXME: return for debug
 	//	return
 
-	respList := aggregateResponses(results, 10)
+	respList := aggregateResponses(results, 300)
 	nmbMsgs := 1
 	var rbMsgs [][]byte
 	for _, chunk := range respList {
