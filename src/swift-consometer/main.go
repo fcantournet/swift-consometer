@@ -67,7 +67,6 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 		results <- ai
 		return
 	}
-	// TODO: Add potential error management when account couldn't be queried
 }
 
 func aggregateResponses(results <-chan accountInfo, chunkSize int) [][]accountInfo {
@@ -109,11 +108,11 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 				ContentType: "application/json",
 				Body:        []byte(rbMsg),
 			})
-		failOnError("Failed to publish the message:\n", err)
+		failOnError("Failed to publish message:\n", err)
 		log.Debug("Message ", nbSent, " out of ", len(rbMsgs), " sent")
 		nbSent++
 	}
-	log.Info("Messages sent!")
+	log.Info("Messages sent")
 	return
 }
 
@@ -163,10 +162,7 @@ func main() {
 		countErrors(failedAccounts)
 	}
 
-	//FIXME: return for debug
-	//	return
-
-	respList := aggregateResponses(results, 300)
+	respList := aggregateResponses(results, 300) //Chunks of 300 accounts, roughly 100KB per message
 	nmbMsgs := 1
 	var rbMsgs [][]byte
 	for _, chunk := range respList {
@@ -179,5 +175,6 @@ func main() {
 		rbMsgs = append(rbMsgs, rbMsg)
 	}
 	rabbitSend(rabbitCreds, rbMsgs)
+
 	return
 }
