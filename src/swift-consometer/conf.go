@@ -14,6 +14,7 @@ func checkConfigFile() {
 		"credentials.openstack.swift_conso_user",
 		"credentials.openstack.swift_conso_password",
 		"credentials.openstack.swift_conso_tenant",
+		"credentials.openstack.swift_conso_domain",
 		"credentials.rabbit.host",
 		"credentials.rabbit.user",
 		"credentials.rabbit.password",
@@ -69,6 +70,7 @@ func readConfig(configPath string, logLevel string) config {
 		Username:         viper.GetString("credentials.openstack.swift_conso_user"),
 		Password:         viper.GetString("credentials.openstack.swift_conso_password"),
 		TenantName:       viper.GetString("credentials.openstack.swift_conso_tenant"),
+		DomainName:       viper.GetString("credentials.openstack.swift_conso_domain"),
 	}
 	conf.Credentials.Openstack.AuthOptions = opts
 
