@@ -117,7 +117,7 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 }
 
 func main() {
-	configPath := flag.String("config", "./etc/swift", "Path of the configuration file directory.")
+	configPath := flag.String("config", "/etc/swift", "Path of the configuration file directory.")
 	logLevel := flag.String("l", "", "Set log level {info, debug, warn, error, panic}. Default is info.")
 	flag.Parse()
 
