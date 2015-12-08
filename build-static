@@ -1,0 +1,4 @@
+#!/bin/bash
+PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}"  )" && pwd  )"
+cd src/swift-consometer
+GOPATH=$PROJECT_DIR/vendor:$PROJECT_DIR CGO_ENABLED=0 GOOS=linux go build -a -x -tags netgo -ldflags '-w' -o $PROJECT_DIR/bin/swift-consometer .

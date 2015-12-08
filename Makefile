@@ -10,8 +10,11 @@ ${project}: build
 build:
 	gb build all
 
+static:
+	./build-static
+
 build-indocker:
-	docker run --rm --name=${project}-build -v $(shell pwd)/:/build/code ${builddockerimage} make
+	docker run --rm --name=${project}-build -v $(shell pwd)/:/build/code ${builddockerimage} make static
 
 dockerimage: build-indocker
 	docker build -t ${rundockerimage}:${version} .
