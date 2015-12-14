@@ -1,17 +1,18 @@
 credentials:
   openstack: #The user must have the role ResellerAdmin
-    keystone_uri: "http://identity.usr.lab0.aub.cloudwatt.net:35357" #Admin endpoint without version
-    swift_conso_tenant: "openstack"
-    swift_conso_user: "admin"
+    keystone_uri: "http://identity.usr.int5.aub.cloudwatt.net:35357" #Admin endpoint without version
+    swift_conso_tenant: "service"
+    swift_conso_user: "swift-consometer"
     swift_conso_password: "yoloswag"
     swift_conso_domain: "default"
-    os_region_name: "lab0"
+    os_region_name: "int5"
   rabbit:
-    host: "d-msqcld-0000.usr.lab0.aub.cloudwatt.net:5672"
-    userid: "ceilometer"
+    host: "d-msqcld-0000.usr.int5.aub.cloudwatt.net:5672"
+    userid: "swift-consometer"
     password: "yoloswag"
     vhost: "openstack"
-    exchange: "ceilometer"
+    exchange: "swift-consometer"
     routing_key: "metering"
+    queue: "swift-consometer"
 concurrency: 500
 log_level: "info"
