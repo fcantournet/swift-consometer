@@ -21,6 +21,7 @@ func checkConfigFile() {
 		"credentials.rabbit.exchange",
 		"credentials.rabbit.routing_key",
 		"credentials.rabbit.vhost",
+		"credentials.rabbit.queue",
 		"credentials.openstack.os_region_name",
 		"concurrency",
 		"log_level"}
@@ -40,6 +41,7 @@ type rabbitCreds struct {
 	Exchange   string
 	RoutingKey string
 	URI        string
+	Queue      string
 }
 
 type config struct {
@@ -81,6 +83,7 @@ func readConfig(configPath string, logLevel string) config {
 		Vhost:      viper.GetString("credentials.rabbit.vhost"),
 		Exchange:   viper.GetString("credentials.rabbit.exchange"),
 		RoutingKey: viper.GetString("credentials.rabbit.routing_key"),
+		Queue:      viper.GetString("credentials.rabbit.queue"),
 	}
 	rabbit.URI = strings.Join([]string{"amqp://", rabbit.User, ":", rabbit.Password, "@", rabbit.Host, "/", rabbit.Vhost}, "")
 	conf.Credentials.Rabbit = rabbit

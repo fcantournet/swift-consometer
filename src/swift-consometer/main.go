@@ -97,6 +97,43 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 	failOnError("Failed to open a channel", err)
 	defer ch.Close()
 
+	if err = ch.ExchangeDeclare(
+		rabbit.Exchange, // name of the exchange
+		"topic",         // type
+		false,           // durable
+		false,           // delete when complete
+		false,           // internal
+		false,           // noWait
+		nil,             // arguments
+	); err != nil {
+		log.Fatal("Exchange Declare: %s", err)
+	}
+
+	log.Debug("Declared Exchange, declaring Queue (%s)", rabbit.Queue)
+	state, err := ch.QueueDeclare(
+		rabbit.Queue, // name of the queue
+		true,         // durable
+		false,        // delete when usused
+		false,        // exclusive
+		false,        // noWait
+		nil,          // arguments
+	)
+	if err != nil {
+		log.Fatal("Queue Declare: %s", err)
+	}
+
+	log.Debug("Declared Queue (%d messages, %d consumers), binding to Exchange (key '%s')",
+		state.Messages, state.Consumers, rabbit.RoutingKey)
+	if err = ch.QueueBind(
+		rabbit.Queue,      // name of the queue
+		rabbit.RoutingKey, // bindingKey
+		rabbit.Exchange,   // sourceExchange
+		false,             // noWait
+		nil,               // arguments
+	); err != nil {
+		log.Fatal("Queue Bind: %s", err)
+	}
+
 	nbSent := 1
 	for _, rbMsg := range rbMsgs {
 		err = ch.Publish(
