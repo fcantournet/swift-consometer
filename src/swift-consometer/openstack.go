@@ -12,17 +12,17 @@ func serviceGet(client *gophercloud.ServiceClient, path string) []byte {
 	token := client.TokenID
 	URL := strings.Join([]string{client.ServiceURL(), path}, "")
 	req, err := http.NewRequest("GET", URL, nil)
-	failOnError("Failed creating the request:\n", err)
+	failOnError("Failed creating the request: ", err)
 	req.Header.Set("X-Auth-Token", token)
 	httpClient := &http.Client{}
 	resp, err := httpClient.Do(req)
-	failOnError("Request failed:\n", err)
+	failOnError("Request failed: ", err)
 	if status := resp.StatusCode; status != http.StatusOK {
-		log.Fatal("Bad response status when getting ", path, " (expecting 200):\n", status)
+		log.Fatal("Bad response status when getting ", path, " (expecting 200): ", status)
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	failOnError("Could not read body from request:\n", err)
+	failOnError("Could not read body from request: ", err)
 	return body
 }
 
@@ -48,7 +48,7 @@ func getServiceID(client *gophercloud.ServiceClient, serviceType string) string 
 	body := serviceGet(client, "services")
 	var c servicesCatalog
 	err := json.Unmarshal(body, &c)
-	failOnError("Failed unmarshalling services catalog:\n", err)
+	failOnError("Failed unmarshalling services catalog: ", err)
 	var result []string
 	for _, service := range c.Services {
 		if service.Type == serviceType {
@@ -56,7 +56,7 @@ func getServiceID(client *gophercloud.ServiceClient, serviceType string) string 
 		}
 	}
 	if len(result) > 1 {
-		log.Fatal("Multiple services available with same name:\n", result)
+		log.Fatal("Multiple services available with same name: ", result)
 	}
 	return result[0]
 }
@@ -84,7 +84,7 @@ func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region s
 	body := serviceGet(client, "endpoints")
 	var c endpointsCatalog
 	err := json.Unmarshal(body, &c)
-	failOnError("Failed unmarshalling endpoint catalog:\n", err)
+	failOnError("Failed unmarshalling endpoint catalog: ", err)
 	serviceID := getServiceID(client, serviceType)
 	var result []string
 	for _, endpoint := range c.Endpoints {
@@ -93,7 +93,7 @@ func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region s
 		}
 	}
 	if len(result) > 1 {
-		log.Fatal("Multiple endpoints available:\n", result)
+		log.Fatal("Multiple endpoints available: ", result)
 	}
 	return result[0]
 }
@@ -111,6 +111,6 @@ func getProjects(client *gophercloud.ServiceClient) projectsList {
 	body := serviceGet(client, "projects")
 	var c projectsList
 	err := json.Unmarshal(body, &c)
-	failOnError("Failed unmarshalling projects:\n", err)
+	failOnError("Failed unmarshalling projects: ", err)
 	return c
 }

@@ -61,7 +61,7 @@ func readConfig(configPath string, logLevel string) config {
 	viper.SetConfigName("consometer")
 	viper.AddConfigPath(configPath)
 	err := viper.ReadInConfig()
-	failOnError("Error reading config file:\n", err)
+	failOnError("Error reading config file: ", err)
 	checkConfigFile()
 
 	var conf config
@@ -93,14 +93,14 @@ func readConfig(configPath string, logLevel string) config {
 	conf.LogLevel = viper.GetString("log_level")
 	if logLevel != "" {
 		parsedLogLevel, err := logrus.ParseLevel(logLevel)
-		failOnError("Bad log level:\n", err)
+		failOnError("Bad log level: ", err)
 		log.Level = parsedLogLevel
 	} else {
 		parsedLogLevel, err := logrus.ParseLevel(conf.LogLevel)
-		failOnError("Bad log level:\n", err)
+		failOnError("Bad log level: ", err)
 		log.Level = parsedLogLevel
 	}
-	log.Debug("Config read:\n", viper.AllSettings())
+	log.Debug("Config read: ", viper.AllSettings())
 
 	return conf
 }

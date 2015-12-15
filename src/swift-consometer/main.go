@@ -89,7 +89,7 @@ func aggregateResponses(results <-chan accountInfo, chunkSize int) [][]accountIn
 }
 
 func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
-	log.Info("Connecting to:\n", rabbit.URI)
+	log.Info("Connecting to: ", rabbit.URI)
 	conn, err := amqp.Dial(rabbit.URI)
 	failOnError("Failed to connect to RabbitMQ", err)
 	defer conn.Close()
@@ -97,6 +97,7 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 	failOnError("Failed to open a channel", err)
 	defer ch.Close()
 
+	log.Debug("Checking existance or declaring exchange: ", rabbit.Exchange)
 	if err = ch.ExchangeDeclare(
 		rabbit.Exchange, // name of the exchange
 		"topic",         // type
@@ -109,8 +110,8 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 		log.Fatal("Exchange Declare: %s", err)
 	}
 
-	log.Debug("Declared Exchange, declaring Queue (%s)", rabbit.Queue)
-	state, err := ch.QueueDeclare(
+	log.Debug("Checking existence or declaring queue: ", rabbit.Queue)
+	_, err = ch.QueueDeclare(
 		rabbit.Queue, // name of the queue
 		true,         // durable
 		false,        // delete when usused
@@ -119,11 +120,10 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 		nil,          // arguments
 	)
 	if err != nil {
-		log.Fatal("Queue Declare: %s", err)
+		log.Fatal("Failed declaring queue Declare: ", err)
 	}
 
-	log.Debug("Declared Queue (%d messages, %d consumers), binding to Exchange (key '%s')",
-		state.Messages, state.Consumers, rabbit.RoutingKey)
+	log.Debug("Binding queue to exchange")
 	if err = ch.QueueBind(
 		rabbit.Queue,      // name of the queue
 		rabbit.RoutingKey, // bindingKey
@@ -145,7 +145,7 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 				ContentType: "application/json",
 				Body:        []byte(rbMsg),
 			})
-		failOnError("Failed to publish message:\n", err)
+		failOnError("Failed to publish message: ", err)
 		log.Debug("Message ", nbSent, " out of ", len(rbMsgs), " sent")
 		nbSent++
 	}
@@ -165,7 +165,7 @@ func main() {
 	concurrency := conf.Concurrency
 
 	provider, err := openstack.AuthenticatedClient(opts)
-	failOnError("Error creating provider:\n", err)
+	failOnError("Error creating provider: ", err)
 
 	idClient := openstack.NewIdentityV3(provider)
 	pList := getProjects(idClient)
@@ -174,7 +174,7 @@ func main() {
 	log.Debug(projects)
 
 	objectStoreURL := getEndpoint(idClient, "object-store", regionName, "admin")
-	log.Debug("Object store url:\n", objectStoreURL)
+	log.Debug("Object store url: ", objectStoreURL)
 
 	// Buffered chan can take all the answers
 	results := make(chan accountInfo, len(projects))
