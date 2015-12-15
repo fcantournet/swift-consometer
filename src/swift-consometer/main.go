@@ -190,14 +190,15 @@ func main() {
 		go getAccountInfo(objectStoreURL, project.ID, results, &wg, sem, provider, failedAccounts)
 	}
 	wg.Wait()
-	log.Info("Processed ", len(results), " tenants in ", time.Since(start))
 	close(results)
 	close(failedAccounts)
 	close(sem)
+
 	if len(failedAccounts) > 0 {
 		log.Error("Number of accounts failed: ", len(failedAccounts))
 		countErrors(failedAccounts)
 	}
+	log.Info(len(results), " tenants fetched out of ", len(projects), " in ", time.Since(start))
 
 	respList := aggregateResponses(results, 300) //Chunks of 300 accounts, roughly 100KB per message
 	nmbMsgs := 1
