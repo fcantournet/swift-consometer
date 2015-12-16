@@ -47,7 +47,7 @@ func getAccountInfo(objectStoreURL, projectID string, results chan<- accountInfo
 		resp, err := provider.Request("HEAD", accountURL, gophercloud.RequestOpts{OkCodes: []int{204, 200}})
 		if err != nil {
 			if i < maxRetries {
-				log.Warn(err, " Retry ", i+1)
+				log.Debug(err, " Retry ", i+1)
 				time.Sleep(100 * time.Millisecond)
 				continue
 			} else {
@@ -56,6 +56,7 @@ func getAccountInfo(objectStoreURL, projectID string, results chan<- accountInfo
 				return
 			}
 		}
+		log.Debug("Fetching account: ", accountURL)
 		ai := accountInfo{
 			CounterName:      "storage.objects.size",
 			ResourceID:       projectID,
@@ -69,7 +70,6 @@ func getAccountInfo(objectStoreURL, projectID string, results chan<- accountInfo
 			CounterType:      "gauge",
 			ResourceMetadata: nil,
 		}
-		log.Debug("Fetched account: ", accountURL)
 		results <- ai
 		return
 	}
@@ -95,15 +95,15 @@ func aggregateResponses(results <-chan accountInfo, chunkSize int) [][]accountIn
 }
 
 func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
-	log.Info("Connecting to: ", rabbit.URI)
+	log.Debug("Connecting to: ", rabbit.URI)
 	conn, err := amqp.Dial(rabbit.URI)
 	failOnError("Failed to connect to RabbitMQ", err)
 	defer conn.Close()
 	ch, err := conn.Channel()
-	failOnError("Failed to open a channel", err)
+	failOnError("Failed to open channel", err)
 	defer ch.Close()
 
-	log.Debug("Checking existance or declaring exchange: ", rabbit.Exchange)
+	log.Debug("Checking existence or declaring exchange: ", rabbit.Exchange)
 	if err = ch.ExchangeDeclare(
 		rabbit.Exchange, // name of the exchange
 		"topic",         // type
@@ -113,7 +113,7 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 		false,           // noWait
 		nil,             // arguments
 	); err != nil {
-		log.Fatal("Exchange Declare: %s", err)
+		log.Fatal("Failed declaring exchange: ", err)
 	}
 
 	log.Debug("Checking existence or declaring queue: ", rabbit.Queue)
@@ -126,7 +126,7 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 		nil,          // arguments
 	)
 	if err != nil {
-		log.Fatal("Failed declaring queue Declare: ", err)
+		log.Fatal("Failed declaring queue: ", err)
 	}
 
 	log.Debug("Binding queue to exchange")
@@ -137,11 +137,13 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 		false,             // noWait
 		nil,               // arguments
 	); err != nil {
-		log.Fatal("Queue Bind: %s", err)
+		log.Fatal("Failed binding queue: ", err)
 	}
 
 	nbSent := 1
 	for _, rbMsg := range rbMsgs {
+		log.Debug("Sending ", nbSent, " out of ", len(rbMsgs), " message with ", len(rbMsg), "B length body")
+		log.Debug(string(rbMsg))
 		err = ch.Publish(
 			rabbit.Exchange,   // exchange
 			rabbit.RoutingKey, // routing key
@@ -152,10 +154,8 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 				Body:        []byte(rbMsg),
 			})
 		failOnError("Failed to publish message: ", err)
-		log.Debug("Message ", nbSent, " out of ", len(rbMsgs), " sent")
 		nbSent++
 	}
-	log.Info("Messages sent")
 	return
 }
 
@@ -172,12 +172,12 @@ func main() {
 	concurrency := conf.Concurrency
 
 	provider, err := openstack.AuthenticatedClient(opts)
-	failOnError("Error creating provider: ", err)
+	failOnError("Failed creating provider: ", err)
 
 	idClient := openstack.NewIdentityV3(provider)
 	pList := getProjects(idClient)
 	projects := pList.Projects
-	log.Info("Number of projects fetched: ", len(projects))
+	log.Info(len(projects), " projects retrieved")
 	log.Debug(projects)
 
 	objectStoreURL := getEndpoint(idClient, "object-store", regionName, "admin")
@@ -189,7 +189,7 @@ func main() {
 	sem := make(chan bool, concurrency)
 
 	var wg sync.WaitGroup
-	log.Info("Launching jobs")
+	log.Debug("Launching jobs")
 	start := time.Now()
 	for _, project := range projects {
 		wg.Add(1)
@@ -201,11 +201,11 @@ func main() {
 	close(failedAccounts)
 	close(sem)
 
+	//failedAccounts channel may be more useful for error management in the future
 	if len(failedAccounts) > 0 {
 		log.Error("Number of accounts failed: ", len(failedAccounts))
-		countErrors(failedAccounts)
 	}
-	log.Info(len(results), " tenants fetched out of ", len(projects), " in ", time.Since(start))
+	log.Info(len(results), " swift accounts fetched out of ", len(projects), " projects in ", time.Since(start))
 
 	respList := aggregateResponses(results, 300) //Chunks of 300 accounts, roughly 100KB per message
 	nmbMsgs := 1
@@ -214,12 +214,12 @@ func main() {
 		output := rabbitPayload{}
 		output.Args.Data = chunk
 		rbMsg, _ := json.Marshal(output)
-		log.Debug("Created ", nmbMsgs, " out of ", len(respList), " message with ", len(rbMsg), "B length body")
-		log.Debug(string(rbMsg))
 		nmbMsgs++
 		rbMsgs = append(rbMsgs, rbMsg)
 	}
+	log.Info("Sending results to queue")
 	rabbitSend(rabbitCreds, rbMsgs)
+	log.Info("Job done")
 
 	return
 }
