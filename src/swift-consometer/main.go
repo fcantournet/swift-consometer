@@ -32,10 +32,10 @@ type rabbitPayload struct {
 	} `json:"args"`
 }
 
-func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo, wg *sync.WaitGroup, sem <-chan bool, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
+func getAccountInfo(objectStoreURL, projectID string, results chan<- accountInfo, wg *sync.WaitGroup, sem <-chan bool, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
 	defer wg.Done()
 	defer func() { <-sem }()
-	accountURL := strings.Join([]string{objectStoreURL, "/v1/AUTH_", tenantID}, "")
+	accountURL := strings.Join([]string{objectStoreURL, "/v1/AUTH_", projectID}, "")
 	var maxRetries = 2
 	for i := 0; i <= maxRetries; i++ {
 		resp, err := provider.Request("HEAD", accountURL, gophercloud.RequestOpts{OkCodes: []int{204, 200}})
@@ -46,20 +46,20 @@ func getAccountInfo(objectStoreURL, tenantID string, results chan<- accountInfo,
 				continue
 			} else {
 				log.Error(err)
-				failedAccounts <- map[error]string{err: tenantID}
+				failedAccounts <- map[error]string{err: projectID}
 				return
 			}
 		}
 		ai := accountInfo{
 			CounterName:      "storage.objects.size",
-			ResourceID:       tenantID,
+			ResourceID:       projectID,
 			MessageID:        uuid.New(),
 			Timestamp:        time.Now().Format(time.RFC3339),
 			CounterVolume:    resp.Header.Get("x-account-bytes-used"),
 			UserID:           nil,
 			Source:           "openstack",
 			CounterUnit:      "B",
-			ProjectID:        tenantID,
+			ProjectID:        projectID,
 			CounterType:      "gauge",
 			ResourceMetadata: nil,
 		}
