@@ -32,6 +32,12 @@ type rabbitPayload struct {
 	} `json:"args"`
 }
 
+func failOnError(msg string, err error) {
+	if err != nil {
+		log.Fatal(msg, err)
+	}
+}
+
 func getAccountInfo(objectStoreURL, projectID string, results chan<- accountInfo, wg *sync.WaitGroup, sem <-chan bool, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
 	defer wg.Done()
 	defer func() { <-sem }()
