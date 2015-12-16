@@ -1,6 +1,6 @@
 project=swift-consometer
 builddockerimage=docker-registry.corp.cloudwatt.com/golang-gbbuilder
-rundockerimage=docker.registry.corp.cloudwatt.com/swift-consometer
+rundockerimage=docker-registry.corp.cloudwatt.com/swift-consometer
 version=$(shell git describe --tags)
 
 all: ${project}
