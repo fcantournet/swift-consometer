@@ -49,7 +49,7 @@ func getAccountInfo(region, objectStoreURL, projectID string, results chan<- acc
 		if err != nil {
 			if i < maxRetries {
 				log.Debug(err, " Retry ", i+1)
-				time.Sleep(100 * time.Millisecond)
+				<-time.Tick(1000 * time.Millisecond)
 				continue
 			} else {
 				log.Error(err)
