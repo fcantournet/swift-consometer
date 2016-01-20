@@ -166,7 +166,7 @@ func main() {
 	flag.Parse()
 
 	conf := readConfig(*configPath, *logLevel)
-	regionName := conf.Credentials.Openstack.OsRegionName
+	regions := conf.Regions
 	opts := conf.Credentials.Openstack.AuthOptions
 	rabbitCreds := conf.Credentials.Rabbit
 	concurrency := conf.Concurrency
@@ -180,46 +180,49 @@ func main() {
 	log.Info(len(projects), " projects retrieved")
 	log.Debug(projects)
 
-	objectStoreURL := getEndpoint(idClient, "object-store", regionName, "admin")
-	log.Debug("Object store url: ", objectStoreURL)
+	for _, region := range regions {
+		log.Info("Working on region: ", region)
+		objectStoreURL := getEndpoint(idClient, "object-store", region, "admin")
+		log.Debug("Object store url: ", objectStoreURL)
 
-	// Buffered chan can take all the answers
-	results := make(chan accountInfo, len(projects))
-	failedAccounts := make(chan map[error]string, len(projects))
-	sem := make(chan bool, concurrency)
+		// Buffered chan can take all the answers
+		results := make(chan accountInfo, len(projects))
+		failedAccounts := make(chan map[error]string, len(projects))
+		sem := make(chan bool, concurrency)
 
-	var wg sync.WaitGroup
-	log.Debug("Launching jobs")
-	start := time.Now()
-	for _, project := range projects {
-		wg.Add(1)
-		sem <- true
-		go getAccountInfo(objectStoreURL, project.ID, results, &wg, sem, provider, failedAccounts)
+		var wg sync.WaitGroup
+		log.Debug("Launching jobs")
+		start := time.Now()
+		for _, project := range projects {
+			wg.Add(1)
+			sem <- true
+			go getAccountInfo(objectStoreURL, project.ID, results, &wg, sem, provider, failedAccounts)
+		}
+		wg.Wait()
+		close(results)
+		close(failedAccounts)
+		close(sem)
+
+		//failedAccounts channel may be more useful for error management in the future
+		if len(failedAccounts) > 0 {
+			log.Error("Number of accounts failed: ", len(failedAccounts))
+		}
+		log.Info(len(results), " swift accounts fetched out of ", len(projects), " projects in ", time.Since(start))
+
+		respList := aggregateResponses(results, 200) //Chunks of 300 accounts, roughly 100KB per message
+		nmbMsgs := 1
+		var rbMsgs [][]byte
+		for _, chunk := range respList {
+			output := rabbitPayload{}
+			output.Args.Data = chunk
+			rbMsg, _ := json.Marshal(output)
+			nmbMsgs++
+			rbMsgs = append(rbMsgs, rbMsg)
+		}
+		log.Info("Sending results to queue")
+		rabbitSend(rabbitCreds, rbMsgs)
+		log.Info("Job done")
 	}
-	wg.Wait()
-	close(results)
-	close(failedAccounts)
-	close(sem)
-
-	//failedAccounts channel may be more useful for error management in the future
-	if len(failedAccounts) > 0 {
-		log.Error("Number of accounts failed: ", len(failedAccounts))
-	}
-	log.Info(len(results), " swift accounts fetched out of ", len(projects), " projects in ", time.Since(start))
-
-	respList := aggregateResponses(results, 300) //Chunks of 300 accounts, roughly 100KB per message
-	nmbMsgs := 1
-	var rbMsgs [][]byte
-	for _, chunk := range respList {
-		output := rabbitPayload{}
-		output.Args.Data = chunk
-		rbMsg, _ := json.Marshal(output)
-		nmbMsgs++
-		rbMsgs = append(rbMsgs, rbMsg)
-	}
-	log.Info("Sending results to queue")
-	rabbitSend(rabbitCreds, rbMsgs)
-	log.Info("Job done")
 
 	return
 }

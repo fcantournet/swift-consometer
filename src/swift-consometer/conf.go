@@ -22,7 +22,7 @@ func checkConfigFile() {
 		"credentials.rabbit.routing_key",
 		"credentials.rabbit.vhost",
 		"credentials.rabbit.queue",
-		"credentials.openstack.os_region_name",
+		"regions",
 		"concurrency",
 		"log_level"}
 
@@ -48,10 +48,10 @@ type config struct {
 	Credentials struct {
 		Rabbit    rabbitCreds
 		Openstack struct {
-			AuthOptions  gophercloud.AuthOptions
-			OsRegionName string
+			AuthOptions gophercloud.AuthOptions
 		}
 	}
+	Regions     []string
 	Concurrency int
 	LogLevel    string
 }
@@ -65,7 +65,7 @@ func readConfig(configPath string, logLevel string) config {
 	checkConfigFile()
 
 	var conf config
-	conf.Credentials.Openstack.OsRegionName = viper.GetString("credentials.openstack.os_region_name")
+	conf.Regions = viper.GetStringSlice("regions")
 
 	opts := gophercloud.AuthOptions{
 		IdentityEndpoint: viper.GetString("credentials.openstack.keystone_uri"),
