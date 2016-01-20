@@ -223,8 +223,9 @@ func main() {
 		}
 		log.Info("Sending results to queue")
 		rabbitSend(rabbitCreds, rbMsgs)
-		log.Info("Job done")
+		log.Info("Done for region ", region)
 	}
+	log.Info("Job done")
 
 	return
 }
