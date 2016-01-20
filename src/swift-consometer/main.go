@@ -24,6 +24,7 @@ type accountInfo struct {
 	ProjectID        string  `json:"project_id"`         // "d5bbc7c06c9e479dbb91912c045cdeab",
 	CounterType      string  `json:"counter_type"`       // "gauge",
 	ResourceMetadata *string `json:"ressource_metadata"` // null
+	Region           string  `json:"region"`             // "int5"
 }
 
 type rabbitPayload struct {
@@ -38,7 +39,7 @@ func failOnError(msg string, err error) {
 	}
 }
 
-func getAccountInfo(objectStoreURL, projectID string, results chan<- accountInfo, wg *sync.WaitGroup, sem <-chan bool, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
+func getAccountInfo(region, objectStoreURL, projectID string, results chan<- accountInfo, wg *sync.WaitGroup, sem <-chan bool, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
 	defer wg.Done()
 	defer func() { <-sem }()
 	accountURL := strings.Join([]string{objectStoreURL, "/v1/AUTH_", projectID}, "")
@@ -69,6 +70,7 @@ func getAccountInfo(objectStoreURL, projectID string, results chan<- accountInfo
 			ProjectID:        projectID,
 			CounterType:      "gauge",
 			ResourceMetadata: nil,
+			Region:           region,
 		}
 		results <- ai
 		return
@@ -196,7 +198,7 @@ func main() {
 		for _, project := range projects {
 			wg.Add(1)
 			sem <- true
-			go getAccountInfo(objectStoreURL, project.ID, results, &wg, sem, provider, failedAccounts)
+			go getAccountInfo(region, objectStoreURL, project.ID, results, &wg, sem, provider, failedAccounts)
 		}
 		wg.Wait()
 		close(results)
