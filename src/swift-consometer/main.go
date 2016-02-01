@@ -172,6 +172,7 @@ func main() {
 	opts := conf.Credentials.Openstack.AuthOptions
 	rabbitCreds := conf.Credentials.Rabbit
 	concurrency := conf.Concurrency
+	ticker := conf.Ticker
 
 	provider, err := openstack.AuthenticatedClient(opts)
 	failOnError("Failed creating provider: ", err)
@@ -198,6 +199,9 @@ func main() {
 		for _, project := range projects {
 			wg.Add(1)
 			sem <- true
+			if ticker > 0 {
+				<-time.Tick(time.Duration(ticker) * time.Millisecond)
+			}
 			go getAccountInfo(region, objectStoreURL, project.ID, results, &wg, sem, provider, failedAccounts)
 		}
 		wg.Wait()

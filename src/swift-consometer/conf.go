@@ -24,6 +24,7 @@ func checkConfigFile() {
 		"credentials.rabbit.queue",
 		"regions",
 		"concurrency",
+		"ticker",
 		"log_level"}
 
 	for _, key := range mandatoryKeys {
@@ -53,6 +54,7 @@ type config struct {
 	}
 	Regions     []string
 	Concurrency int
+	Ticker      int
 	LogLevel    string
 }
 
@@ -89,6 +91,7 @@ func readConfig(configPath string, logLevel string) config {
 	conf.Credentials.Rabbit = rabbit
 
 	conf.Concurrency = viper.GetInt("concurrency")
+	conf.Ticker = viper.GetInt("ticker")
 
 	conf.LogLevel = viper.GetString("log_level")
 	if logLevel != "" {
