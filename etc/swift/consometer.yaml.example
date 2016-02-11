@@ -5,7 +5,6 @@ credentials:
     swift_conso_user: "swift-consometer"
     swift_conso_password: "yoloswag"
     swift_conso_domain: "default"
-    os_region_name: "int5"
   rabbit:
     host: "d-msqcld-0000.usr.int5.aub.cloudwatt.net:5672"
     userid: "swift-consometer"
@@ -14,5 +13,8 @@ credentials:
     exchange: "swift-consometer"
     routing_key: "metering"
     queue: "swift-consometer"
-concurrency: 500
+regions:
+  - "int5"
+  - "int"
+concurrency: 5
 log_level: "info"

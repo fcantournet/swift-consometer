@@ -24,6 +24,7 @@ type accountInfo struct {
 	ProjectID        string  `json:"project_id"`         // "d5bbc7c06c9e479dbb91912c045cdeab",
 	CounterType      string  `json:"counter_type"`       // "gauge",
 	ResourceMetadata *string `json:"ressource_metadata"` // null
+	Region           string  `json:"region"`             // "int5"
 }
 
 type rabbitPayload struct {
@@ -38,7 +39,7 @@ func failOnError(msg string, err error) {
 	}
 }
 
-func getAccountInfo(objectStoreURL, projectID string, results chan<- accountInfo, wg *sync.WaitGroup, sem <-chan bool, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
+func getAccountInfo(region, objectStoreURL, projectID string, results chan<- accountInfo, wg *sync.WaitGroup, sem <-chan bool, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
 	defer wg.Done()
 	defer func() { <-sem }()
 	accountURL := strings.Join([]string{objectStoreURL, "/v1/AUTH_", projectID}, "")
@@ -48,7 +49,7 @@ func getAccountInfo(objectStoreURL, projectID string, results chan<- accountInfo
 		if err != nil {
 			if i < maxRetries {
 				log.Debug(err, " Retry ", i+1)
-				time.Sleep(100 * time.Millisecond)
+				<-time.Tick(1000 * time.Millisecond)
 				continue
 			} else {
 				log.Error(err)
@@ -69,6 +70,7 @@ func getAccountInfo(objectStoreURL, projectID string, results chan<- accountInfo
 			ProjectID:        projectID,
 			CounterType:      "gauge",
 			ResourceMetadata: nil,
+			Region:           region,
 		}
 		results <- ai
 		return
@@ -166,7 +168,7 @@ func main() {
 	flag.Parse()
 
 	conf := readConfig(*configPath, *logLevel)
-	regionName := conf.Credentials.Openstack.OsRegionName
+	regions := conf.Regions
 	opts := conf.Credentials.Openstack.AuthOptions
 	rabbitCreds := conf.Credentials.Rabbit
 	concurrency := conf.Concurrency
@@ -180,45 +182,49 @@ func main() {
 	log.Info(len(projects), " projects retrieved")
 	log.Debug(projects)
 
-	objectStoreURL := getEndpoint(idClient, "object-store", regionName, "admin")
-	log.Debug("Object store url: ", objectStoreURL)
+	for _, region := range regions {
+		log.Info("Working on region: ", region)
+		objectStoreURL := getEndpoint(idClient, "object-store", region, "admin")
+		log.Debug("Object store url: ", objectStoreURL)
 
-	// Buffered chan can take all the answers
-	results := make(chan accountInfo, len(projects))
-	failedAccounts := make(chan map[error]string, len(projects))
-	sem := make(chan bool, concurrency)
+		// Buffered chan can take all the answers
+		results := make(chan accountInfo, len(projects))
+		failedAccounts := make(chan map[error]string, len(projects))
+		sem := make(chan bool, concurrency)
 
-	var wg sync.WaitGroup
-	log.Debug("Launching jobs")
-	start := time.Now()
-	for _, project := range projects {
-		wg.Add(1)
-		sem <- true
-		go getAccountInfo(objectStoreURL, project.ID, results, &wg, sem, provider, failedAccounts)
+		var wg sync.WaitGroup
+		log.Debug("Launching jobs")
+		start := time.Now()
+		for _, project := range projects {
+			wg.Add(1)
+			sem <- true
+			go getAccountInfo(region, objectStoreURL, project.ID, results, &wg, sem, provider, failedAccounts)
+		}
+		wg.Wait()
+		close(results)
+		close(failedAccounts)
+		close(sem)
+
+		//failedAccounts channel may be more useful for error management in the future
+		if len(failedAccounts) > 0 {
+			log.Error("Number of accounts failed: ", len(failedAccounts))
+		}
+		log.Info(len(results), " swift accounts fetched out of ", len(projects), " projects in ", time.Since(start))
+
+		respList := aggregateResponses(results, 200) //Chunks of 300 accounts, roughly 100KB per message
+		nmbMsgs := 1
+		var rbMsgs [][]byte
+		for _, chunk := range respList {
+			output := rabbitPayload{}
+			output.Args.Data = chunk
+			rbMsg, _ := json.Marshal(output)
+			nmbMsgs++
+			rbMsgs = append(rbMsgs, rbMsg)
+		}
+		log.Info("Sending results to queue")
+		rabbitSend(rabbitCreds, rbMsgs)
+		log.Info("Done for region ", region)
 	}
-	wg.Wait()
-	close(results)
-	close(failedAccounts)
-	close(sem)
-
-	//failedAccounts channel may be more useful for error management in the future
-	if len(failedAccounts) > 0 {
-		log.Error("Number of accounts failed: ", len(failedAccounts))
-	}
-	log.Info(len(results), " swift accounts fetched out of ", len(projects), " projects in ", time.Since(start))
-
-	respList := aggregateResponses(results, 300) //Chunks of 300 accounts, roughly 100KB per message
-	nmbMsgs := 1
-	var rbMsgs [][]byte
-	for _, chunk := range respList {
-		output := rabbitPayload{}
-		output.Args.Data = chunk
-		rbMsg, _ := json.Marshal(output)
-		nmbMsgs++
-		rbMsgs = append(rbMsgs, rbMsg)
-	}
-	log.Info("Sending results to queue")
-	rabbitSend(rabbitCreds, rbMsgs)
 	log.Info("Job done")
 
 	return
