@@ -14,7 +14,7 @@ credentials:
     routing_key: "metering"
     queue: "swift-consometer"
 regions:
-  -"int5"
-  -"int4"
+  - "int5"
+  - "int"
 concurrency: 5
 log_level: "info"
