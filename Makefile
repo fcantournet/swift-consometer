@@ -16,9 +16,5 @@ static:
 build-indocker:
 	docker run --rm --name=${project}-build -v $(shell pwd)/:/build/code ${builddockerimage} make static
 
-dockerimage: build-indocker
-	docker build -t ${rundockerimage}:${version} .
-	docker push ${rundockerimage}
-
 deploy: build
 	scp bin/swift-consometer d-bstinf-0000.adm.lab0.aub.cloudwatt.net:~
