@@ -16,5 +16,5 @@ node('dockerHost_int0'){
   stage 'build docker'
   env.GIT_TAG_NAME = readFile 'gittagname'
   env.GIT_COMMIT = readFile 'gitcommit'
-  build job: 'Docker/swift-consometer_build', parameters: [[$class: 'StringParameterValue', name: 'upstream_job', value: "${env.JOB_NAME##*/}"], [$class: 'StringParameterValue', name: 'APPLICATION_COMMIT', value: "${env.GIT_COMMIT}"], [$class: 'StringParameterValue', name: 'APPLICATION_BRANCH', value: '${env.BRANCH_NAME}'], [$class: 'StringParameterValue', name: 'APPLICATION_GIT_TAG', value: "${env.GIT_TAG_NAME}"]], propagate: false, wait: false
+  build job: 'Docker/swift-consometer_build', parameters: [[$class: 'StringParameterValue', name: 'upstream_job', value: "${env.JOB_NAME}"], [$class: 'StringParameterValue', name: 'APPLICATION_COMMIT', value: "${env.GIT_COMMIT}"], [$class: 'StringParameterValue', name: 'APPLICATION_BRANCH', value: '${env.BRANCH_NAME}'], [$class: 'StringParameterValue', name: 'APPLICATION_GIT_TAG', value: "${env.GIT_TAG_NAME}"]], propagate: false, wait: false
 }
