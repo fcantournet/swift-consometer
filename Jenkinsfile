@@ -20,10 +20,10 @@ node('dockerHost_int0'){
 }
 
 def trigger_parameterized_build(DOWNSTREAM_JOB, UPSTREAM_PROJECT, GIT_COMMIT, BRANCH, GIT_TAG_NAME) {
-  build job: "${DOWNSTREAM_JOB,}",
+  build job: "${DOWNSTREAM_JOB}",
   parameters: [
     new StringParameterValue
-    ('upstream_job', "${UPSTREAM_PROJECT,}"),
+    ('upstream_job', "${UPSTREAM_PROJECT}"),
     new StringParameterValue
     ('APPLICATION_COMMIT',"${GIT_COMMIT}"),
     new StringParameterValue
