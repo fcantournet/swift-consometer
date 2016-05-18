@@ -14,7 +14,5 @@ node('dockerHost_int0'){
   archive 'artifacts/'
 
   stage 'build docker'
-  env.GIT_TAG_NAME = readFile 'gittagname'
-  env.GIT_COMMIT = readFile 'gitcommit'
-  cloudwatt.trigger_parameterized_build('Docker/swift-consometer_build', "${env.JOB_NAME}", "${env.GIT_COMMIT}", "master", "${env.GIT_TAG_NAME}")
+  cloudwatt.trigger_parameterized_build('Docker/swift-consometer_build', "${env.JOB_NAME}", "master")
 }
