@@ -16,5 +16,20 @@ node('dockerHost_int0'){
   stage 'build docker'
   env.GIT_TAG_NAME = readFile 'gittagname'
   env.GIT_COMMIT = readFile 'gitcommit'
-  build job: 'Docker/swift-consometer_build', parameters: [[$class: 'StringParameterValue', name: 'upstream_job', value: "${env.JOB_NAME}"], [$class: 'StringParameterValue', name: 'APPLICATION_COMMIT', value: "${env.GIT_COMMIT}"], [$class: 'StringParameterValue', name: 'APPLICATION_BRANCH', value: '${env.BRANCH_NAME}'], [$class: 'StringParameterValue', name: 'APPLICATION_GIT_TAG', value: "${env.GIT_TAG_NAME}"]], propagate: false, wait: false
+ 
+  properties [[$class: 'CopyArtifactPermissionProperty', projectNames: '/Docker/swift-consometer_build'], [$class: 'RebuildSettings', autoRebuild: false, rebuildDisabled: false], <object of type jenkins.plugins.slack.SlackNotifier.SlackJobProperty>]  
+
+  build job: 'Docker/swift-consometer_build',
+  parameters: [
+    new StringParameterValue
+    ('upstream_job', "{env.JOB_NAME}"),
+    new StringParameterValue
+    ('APPLICATION_COMMIT',"${env.GIT_COMMIT}"),
+    new StringParameterValue
+    ('APPLICATION_BRANCH',"master"),
+    new StringParameterValue
+    ('APPLICATION_GIT_TAG',"${env.GIT_TAG_NAME}")
+  ], 
+  propagate: true, 
+  wait: true
 }
