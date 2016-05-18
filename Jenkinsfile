@@ -2,9 +2,6 @@ node('dockerHost_int0'){
   stage 'Clean workspace'
   deleteDir()
 
-  stage 'update properties'  
-  CopyArtifactPermissionProperty: '/Docker/swift-consometer_build'
-
   stage 'Checkout'
   checkout scm
 
