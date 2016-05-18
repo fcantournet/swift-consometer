@@ -6,7 +6,7 @@ node('dockerHost_int0'){
   checkout scm
 
   stage 'build application'
-  build{
+  cloudwatt_build{
     withDockerContainer(args: '-e HTTP_PROXY=$HTTP_PROXY -e HTTPS_PROXY=$HTTP_PROXY', image: 'r.cwpriv.net/jenkins/golang-gbbuilder')     {sh './build-static artifacts'}
   }
 
