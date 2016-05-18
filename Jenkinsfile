@@ -16,18 +16,21 @@ node('dockerHost_int0'){
   stage 'build docker'
   env.GIT_TAG_NAME = readFile 'gittagname'
   env.GIT_COMMIT = readFile 'gitcommit'
- 
-  build job: 'Docker/swift-consometer_build',
+  trigger_parameterized_build('Docker/swift-consometer_build', "${env.JOB_NAME}", "${env.GIT_COMMIT}", "master", "${env.GIT_TAG_NAME}")
+}
+
+def trigger_parameterized_build(DOWNSTREAM_JOB, UPSTREAM_PROJECT, GIT_COMMIT, BRANCH, GIT_TAG_NAME) {
+  build job: "${DOWNSTREAM_JOB,}",
   parameters: [
     new StringParameterValue
-    ('upstream_job', "${env.JOB_NAME}"),
+    ('upstream_job', "${UPSTREAM_PROJECT,}"),
     new StringParameterValue
-    ('APPLICATION_COMMIT',"${env.GIT_COMMIT}"),
+    ('APPLICATION_COMMIT',"${GIT_COMMIT}"),
     new StringParameterValue
-    ('APPLICATION_BRANCH',"master"),
+    ('APPLICATION_BRANCH',"${BRANCH}"),
     new StringParameterValue
-    ('APPLICATION_GIT_TAG',"${env.GIT_TAG_NAME}")
+    ('APPLICATION_GIT_TAG',"${GIT_TAG_NAME}")
   ], 
-  propagate: true, 
+  propagate: true,
   wait: false
 }
