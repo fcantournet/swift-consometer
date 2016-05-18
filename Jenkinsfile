@@ -23,7 +23,7 @@ node('dockerHost_int0'){
   build job: 'Docker/swift-consometer_build',
   parameters: [
     new StringParameterValue
-    ('upstream_job', "{env.JOB_NAME}"),
+    ('upstream_job', "${env.JOB_NAME}"),
     new StringParameterValue
     ('APPLICATION_COMMIT',"${env.GIT_COMMIT}"),
     new StringParameterValue
