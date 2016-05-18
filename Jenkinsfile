@@ -29,5 +29,5 @@ node('dockerHost_int0'){
     ('APPLICATION_GIT_TAG',"${env.GIT_TAG_NAME}")
   ], 
   propagate: true, 
-  wait: true
+  wait: false
 }
