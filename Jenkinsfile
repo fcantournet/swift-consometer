@@ -3,7 +3,7 @@ node('dockerHost_int0'){
   deleteDir()
 
   stage 'update properties'  
-  properties [[$class: 'CopyArtifactPermissionProperty', projectNames: '/Docker/swift-consometer_build'], [$class: 'RebuildSettings', autoRebuild: false, rebuildDisabled: false], '<object of type jenkins.plugins.slack.SlackNotifier.SlackJobProperty>']
+  CopyArtifactPermissionProperty: '/Docker/swift-consometer_build'
 
   stage 'Checkout'
   checkout scm
