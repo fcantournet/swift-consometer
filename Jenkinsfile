@@ -2,6 +2,9 @@ node('dockerHost_int0'){
   stage 'Clean workspace'
   deleteDir()
 
+  stage 'update properties'  
+  properties [[$class: 'CopyArtifactPermissionProperty', projectNames: '/Docker/swift-consometer_build'], [$class: 'RebuildSettings', autoRebuild: false, rebuildDisabled: false], '<object of type jenkins.plugins.slack.SlackNotifier.SlackJobProperty>']
+
   stage 'Checkout'
   checkout scm
 
@@ -17,8 +20,6 @@ node('dockerHost_int0'){
   env.GIT_TAG_NAME = readFile 'gittagname'
   env.GIT_COMMIT = readFile 'gitcommit'
  
-  properties [[$class: 'CopyArtifactPermissionProperty', projectNames: '/Docker/swift-consometer_build']] 
-
   build job: 'Docker/swift-consometer_build',
   parameters: [
     new StringParameterValue
