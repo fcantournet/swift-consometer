@@ -1,9 +1,5 @@
 node('dockerHost_int0'){
-  stage 'Clean workspace'
-  deleteDir()
-
-  stage 'Checkout'
-  checkout scm
+  cloudwatt.init()
 
   stage 'build application'
   cloudwatt_build{
