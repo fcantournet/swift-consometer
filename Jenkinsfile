@@ -3,6 +3,7 @@ node('dockerHost_int0'){
 
   stage 'build application'
   cloudwatt_build{
+    docker pull r.cwpriv.net/jenkins/golang-gbbuilder
     withDockerContainer(args: '-e HTTP_PROXY=$HTTP_PROXY -e HTTPS_PROXY=$HTTP_PROXY', image: 'r.cwpriv.net/jenkins/golang-gbbuilder')     {sh './build-static artifacts'}
   }
 
