@@ -173,7 +173,7 @@ func main() {
 	ticker := conf.Ticker
 
 	go func() {
-		time.Sleep(3600 * time.Second)
+		time.Sleep(1800 * time.Second)
 		log.Fatal("Timeout")
 	}()
 
