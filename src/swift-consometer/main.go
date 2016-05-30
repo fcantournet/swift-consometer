@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"github.com/pborman/uuid"
 	"github.com/rackspace/gophercloud"
 	"github.com/rackspace/gophercloud/openstack"
@@ -39,9 +40,8 @@ func failOnError(msg string, err error) {
 	}
 }
 
-func getAccountInfo(region, objectStoreURL, projectID string, results chan<- accountInfo, wg *sync.WaitGroup, sem <-chan bool, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
-	defer wg.Done()
-	defer func() { <-sem }()
+func getAccountInfo(region, objectStoreURL, projectID string, results chan<- accountInfo, wga *sync.WaitGroup, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
+	defer wga.Done()
 	accountURL := strings.Join([]string{objectStoreURL, "/v1/AUTH_", projectID}, "")
 	var maxRetries = 2
 	for i := 0; i <= maxRetries; i++ {
@@ -162,7 +162,6 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 }
 
 func main() {
-	log.Info("Starting...")
 	configPath := flag.String("config", "/etc/swift_consometer/", "Path of the configuration file directory.")
 	logLevel := flag.String("l", "", "Set log level info|debug|warn|error|panic. Default is info.")
 	flag.Parse()
@@ -171,7 +170,6 @@ func main() {
 	regions := conf.Regions
 	opts := conf.Credentials.Openstack.AuthOptions
 	rabbitCreds := conf.Credentials.Rabbit
-	concurrency := conf.Concurrency
 	ticker := conf.Ticker
 
 	provider, err := openstack.AuthenticatedClient(opts)
@@ -183,53 +181,57 @@ func main() {
 	log.Info(len(projects), " projects retrieved")
 	log.Debug(projects)
 
+	var wg sync.WaitGroup
+	var wga sync.WaitGroup
 	for _, region := range regions {
-		log.Info("Working on region: ", region)
-		objectStoreURL := getEndpoint(idClient, "object-store", region, "admin")
-		log.Debug("Object store url: ", objectStoreURL)
+		log.Info(region)
+		wg.Add(1)
+		go func(region string) {
+			defer wg.Done()
+			log.Info(fmt.Sprintf("[%s] Starting", region))
+			objectStoreURL := getEndpoint(idClient, "object-store", region, "admin")
+			log.Debug(fmt.Sprintf("[%s] Object store url: %s", region, objectStoreURL))
 
-		// Buffered chan can take all the answers
-		results := make(chan accountInfo, len(projects))
-		failedAccounts := make(chan map[error]string, len(projects))
-		sem := make(chan bool, concurrency)
+			// Buffered chan can take all the answers
+			results := make(chan accountInfo, len(projects))
+			failedAccounts := make(chan map[error]string, len(projects))
 
-		var wg sync.WaitGroup
-		log.Debug("Launching jobs")
-		start := time.Now()
-		for _, project := range projects {
-			wg.Add(1)
-			sem <- true
-			if ticker > 0 {
-				<-time.Tick(time.Duration(ticker) * time.Millisecond)
+			log.Debug(fmt.Sprintf("[%s] Launching jobs", region))
+			start := time.Now()
+			for _, project := range projects {
+				wga.Add(1)
+				if ticker > 0 {
+					<-time.Tick(time.Duration(ticker) * time.Millisecond)
+				}
+				go getAccountInfo(region, objectStoreURL, project.ID, results, &wga, provider, failedAccounts)
 			}
-			go getAccountInfo(region, objectStoreURL, project.ID, results, &wg, sem, provider, failedAccounts)
-		}
-		wg.Wait()
-		close(results)
-		close(failedAccounts)
-		close(sem)
+			wga.Wait()
+			close(results)
+			close(failedAccounts)
 
-		//failedAccounts channel may be more useful for error management in the future
-		if len(failedAccounts) > 0 {
-			log.Error("Number of accounts failed: ", len(failedAccounts))
-		}
-		log.Info(len(results), " swift accounts fetched out of ", len(projects), " projects in ", time.Since(start))
+			//failedAccounts channel may be more useful for error management in the future
+			if len(failedAccounts) > 0 {
+				log.Error(fmt.Sprintf("[%s] Number of accounts failed: %d", region, len(failedAccounts)))
+			}
+			log.Info(fmt.Sprintf("[%s] %d Swift accounts fetched out of %d projects in %d", region, len(results), len(projects), time.Since(start)))
 
-		respList := aggregateResponses(results, 200) //Chunks of 300 accounts, roughly 100KB per message
-		nmbMsgs := 1
-		var rbMsgs [][]byte
-		for _, chunk := range respList {
-			output := rabbitPayload{}
-			output.Args.Data = chunk
-			rbMsg, _ := json.Marshal(output)
-			nmbMsgs++
-			rbMsgs = append(rbMsgs, rbMsg)
-		}
-		log.Info("Sending results to queue")
-		rabbitSend(rabbitCreds, rbMsgs)
-		log.Info("Done for region ", region)
+			respList := aggregateResponses(results, 200) //Chunks of 300 accounts, roughly 100KB per message
+			nmbMsgs := 1
+			var rbMsgs [][]byte
+			for _, chunk := range respList {
+				output := rabbitPayload{}
+				output.Args.Data = chunk
+				rbMsg, _ := json.Marshal(output)
+				nmbMsgs++
+				rbMsgs = append(rbMsgs, rbMsg)
+			}
+			log.Info(fmt.Sprintf("[%s] Sending results to queue", region))
+			rabbitSend(rabbitCreds, rbMsgs)
+			log.Info(fmt.Sprintf("[%s] Done", region))
+		}(region)
 	}
-	log.Info("Job done")
+	wg.Wait()
+	log.Info("Done")
 
 	return
 }
