@@ -172,6 +172,11 @@ func main() {
 	rabbitCreds := conf.Credentials.Rabbit
 	ticker := conf.Ticker
 
+	go func() {
+		time.Sleep(3600 * time.Second)
+		log.Fatal("Timeout")
+	}()
+
 	provider, err := openstack.AuthenticatedClient(opts)
 	failOnError("Failed creating provider: ", err)
 
