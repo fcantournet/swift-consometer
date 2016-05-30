@@ -188,11 +188,10 @@ func main() {
 	log.Debug(projects)
 
 	var wg sync.WaitGroup
+	wg.Add(len(regions))
 	for _, region := range regions {
-		wg.Add(1)
 		go func(region string) {
 			defer wg.Done()
-			var wga sync.WaitGroup
 			log.Info(fmt.Sprintf("[%s] Starting", region))
 			objectStoreURL := getEndpoint(idClient, "object-store", region, "admin")
 			log.Debug(fmt.Sprintf("[%s] Object store url: %s", region, objectStoreURL))
@@ -203,13 +202,16 @@ func main() {
 
 			log.Debug(fmt.Sprintf("[%s] Launching jobs", region))
 			start := time.Now()
+
+			var wga sync.WaitGroup
+			wga.Add(len(projects))
 			for _, project := range projects {
-				wga.Add(1)
 				if ticker > 0 {
 					<-time.Tick(time.Duration(ticker) * time.Millisecond)
 				}
 				go getAccountInfo(region, objectStoreURL, project.ID, results, &wga, provider, failedAccounts)
 			}
+
 			wga.Wait()
 			close(results)
 			close(failedAccounts)
@@ -221,13 +223,11 @@ func main() {
 			log.Info(fmt.Sprintf("[%s] %d Swift accounts fetched out of %d projects in %v", region, len(results), len(projects), time.Since(start)))
 
 			respList := aggregateResponses(results, 200) //Chunks of 200 accounts, roughly 100KB per message
-			nmbMsgs := 1
 			var rbMsgs [][]byte
 			for _, chunk := range respList {
 				output := rabbitPayload{}
 				output.Args.Data = chunk
 				rbMsg, _ := json.Marshal(output)
-				nmbMsgs++
 				rbMsgs = append(rbMsgs, rbMsg)
 			}
 			log.Info(fmt.Sprintf("[%s] Sending results to queue", region))
