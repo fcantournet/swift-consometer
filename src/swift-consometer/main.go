@@ -189,7 +189,6 @@ func main() {
 	var wg sync.WaitGroup
 	var wga sync.WaitGroup
 	for _, region := range regions {
-		log.Info(region)
 		wg.Add(1)
 		go func(region string) {
 			defer wg.Done()
