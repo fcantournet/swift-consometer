@@ -23,7 +23,7 @@ func checkConfigFile() {
 		"credentials.rabbit.vhost",
 		"credentials.rabbit.queue",
 		"regions",
-		"concurrency",
+		"ticker",
 		"log_level"}
 
 	for _, key := range mandatoryKeys {
@@ -51,9 +51,9 @@ type config struct {
 			AuthOptions gophercloud.AuthOptions
 		}
 	}
-	Regions     []string
-	Concurrency int
-	LogLevel    string
+	Regions  []string
+	Ticker   int
+	LogLevel string
 }
 
 func readConfig(configPath string, logLevel string) config {
@@ -88,7 +88,7 @@ func readConfig(configPath string, logLevel string) config {
 	rabbit.URI = strings.Join([]string{"amqp://", rabbit.User, ":", rabbit.Password, "@", rabbit.Host, "/", rabbit.Vhost}, "")
 	conf.Credentials.Rabbit = rabbit
 
-	conf.Concurrency = viper.GetInt("concurrency")
+	conf.Ticker = viper.GetInt("ticker")
 
 	conf.LogLevel = viper.GetString("log_level")
 	if logLevel != "" {

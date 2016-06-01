@@ -16,5 +16,5 @@ credentials:
 regions:
   - "int5"
   - "int"
-concurrency: 5
+ticker: 100
 log_level: "info"
