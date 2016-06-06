@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 	"github.com/rackspace/gophercloud"
 	"github.com/spf13/viper"
 	"strings"
@@ -9,7 +11,7 @@ import (
 
 var log = logrus.New()
 
-func checkConfigFile() {
+func checkConfigFile() error {
 	mandatoryKeys := []string{"credentials.openstack.keystone_uri",
 		"credentials.openstack.swift_conso_user",
 		"credentials.openstack.swift_conso_password",
@@ -28,9 +30,10 @@ func checkConfigFile() {
 
 	for _, key := range mandatoryKeys {
 		if !viper.IsSet(key) {
-			log.Fatal("Incomplete configuration. Missing: ", key)
+			return errors.New(fmt.Sprintf("Incomplete configuration. Missing key %s", key))
 		}
 	}
+	return nil
 }
 
 type rabbitCreds struct {
@@ -56,13 +59,18 @@ type config struct {
 	LogLevel string
 }
 
-func readConfig(configPath string, logLevel string) config {
+func readConfig(configPath string, logLevel string) (config, error) {
 	viper.SetConfigType("yaml")
 	viper.SetConfigName("consometer")
 	viper.AddConfigPath(configPath)
 	err := viper.ReadInConfig()
-	failOnError("Error reading config file: ", err)
-	checkConfigFile()
+	if err != nil {
+		return nil, errors.Wrap(err, "Read config failed")
+	}
+	err := checkConfigFile()
+	if err != nil {
+		return nil, errors.Wrap(err, "Check config file failed")
+	}
 
 	var conf config
 	conf.Regions = viper.GetStringSlice("regions")
@@ -93,14 +101,18 @@ func readConfig(configPath string, logLevel string) config {
 	conf.LogLevel = viper.GetString("log_level")
 	if logLevel != "" {
 		parsedLogLevel, err := logrus.ParseLevel(logLevel)
-		failOnError("Bad log level: ", err)
+		if err != nil {
+			return nil, errors.Wrap(err, "Bad log level")
+		}
 		log.Level = parsedLogLevel
 	} else {
 		parsedLogLevel, err := logrus.ParseLevel(conf.LogLevel)
-		failOnError("Bad log level: ", err)
+		if err != nil {
+			return nil, errors.Wrap(err, "Bad log level")
+		}
 		log.Level = parsedLogLevel
 	}
 	log.Debug("Config read: ", viper.AllSettings())
 
-	return conf
+	return conf, nil
 }

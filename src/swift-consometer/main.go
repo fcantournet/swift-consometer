@@ -167,7 +167,11 @@ func main() {
 	logLevel := flag.String("l", "", "Set log level info|debug|warn|error|panic. Default is info.")
 	flag.Parse()
 
-	conf := readConfig(*configPath, *logLevel)
+	conf, err := readConfig(*configPath, *logLevel)
+	if err != nil {
+		log.Fatal("Failed reading configuration: ", err)
+	}
+
 	regions := conf.Regions
 	opts := conf.Credentials.Openstack.AuthOptions
 	rabbitCreds := conf.Credentials.Rabbit
@@ -179,7 +183,9 @@ func main() {
 	}()
 
 	provider, err := openstack.AuthenticatedClient(opts)
-	failOnError("Failed creating provider: ", err)
+	if err != nil {
+		log.Fatal("Failed creating provider: ", err)
+	}
 
 	idClient := openstack.NewIdentityV3(provider)
 	pList := getProjects(idClient)
