@@ -60,19 +60,17 @@ type config struct {
 }
 
 func readConfig(configPath string, logLevel string) (config, error) {
+	var conf config
 	viper.SetConfigType("yaml")
 	viper.SetConfigName("consometer")
 	viper.AddConfigPath(configPath)
-	err := viper.ReadInConfig()
-	if err != nil {
-		return nil, errors.Wrap(err, "Read config failed")
+	if err := viper.ReadInConfig(); err != nil {
+		return conf, errors.Wrap(err, "Read config failed")
 	}
-	err := checkConfigFile()
-	if err != nil {
-		return nil, errors.Wrap(err, "Check config file failed")
+	if err := checkConfigFile(); err != nil {
+		return conf, errors.Wrap(err, "Check config file failed")
 	}
 
-	var conf config
 	conf.Regions = viper.GetStringSlice("regions")
 
 	opts := gophercloud.AuthOptions{
@@ -102,13 +100,13 @@ func readConfig(configPath string, logLevel string) (config, error) {
 	if logLevel != "" {
 		parsedLogLevel, err := logrus.ParseLevel(logLevel)
 		if err != nil {
-			return nil, errors.Wrap(err, "Bad log level")
+			return conf, errors.Wrap(err, "Bad log level")
 		}
 		log.Level = parsedLogLevel
 	} else {
 		parsedLogLevel, err := logrus.ParseLevel(conf.LogLevel)
 		if err != nil {
-			return nil, errors.Wrap(err, "Bad log level")
+			return conf, errors.Wrap(err, "Bad log level")
 		}
 		log.Level = parsedLogLevel
 	}
