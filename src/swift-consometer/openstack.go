@@ -2,28 +2,36 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/pkg/errors"
 	"github.com/rackspace/gophercloud"
 	"io/ioutil"
 	"net/http"
 	"strings"
 )
 
-func serviceGet(client *gophercloud.ServiceClient, path string) []byte {
+func serviceGet(client *gophercloud.ServiceClient, path string) ([]byte, error) {
 	token := client.TokenID
 	URL := strings.Join([]string{client.ServiceURL(), path}, "")
 	req, err := http.NewRequest("GET", URL, nil)
-	failOnError("Failed creating the request: ", err)
+	if err != nil {
+		return []byte{}, errors.Wrap(err, "Failed creating request")
+	}
 	req.Header.Set("X-Auth-Token", token)
 	httpClient := &http.Client{}
 	resp, err := httpClient.Do(req)
-	failOnError("Request failed: ", err)
+	if err != nil {
+		return []byte{}, errors.Wrap(err, "Request failed")
+	}
 	if status := resp.StatusCode; status != http.StatusOK {
-		log.Fatal("Bad response status when getting ", path, " (expecting 200): ", status)
+		return []byte{}, errors.New(fmt.Sprintf("Bad response status when getting %s (expecting 200 OK): %s", path, resp.Status))
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	failOnError("Could not read body from request: ", err)
-	return body
+	if err != nil {
+		return []byte{}, errors.Wrap(err, "Could not read body from request")
+	}
+	return body, nil
 }
 
 type servicesCatalog struct {
@@ -44,11 +52,15 @@ type servicesCatalog struct {
 	} `json:"links"`
 }
 
-func getServiceID(client *gophercloud.ServiceClient, serviceType string) string {
-	body := serviceGet(client, "services")
+func getServiceID(client *gophercloud.ServiceClient, serviceType string) (string, error) {
+	body, err := serviceGet(client, "services")
+	if err != nil {
+		return "", errors.Wrap(err, "Could not get sercices")
+	}
 	var c servicesCatalog
-	err := json.Unmarshal(body, &c)
-	failOnError("Failed unmarshalling services catalog: ", err)
+	if err := json.Unmarshal(body, &c); err != nil {
+		return "", errors.Wrap(err, "Failed unmarshalling services catalog")
+	}
 	var result []string
 	for _, service := range c.Services {
 		if service.Type == serviceType {
@@ -56,9 +68,9 @@ func getServiceID(client *gophercloud.ServiceClient, serviceType string) string 
 		}
 	}
 	if len(result) > 1 {
-		log.Fatal("Multiple services available with same name: ", result)
+		return "", errors.New(fmt.Sprintf(" %v\nMultiple services available with same name", result))
 	}
-	return result[0]
+	return result[0], nil
 }
 
 type endpointsCatalog struct {
@@ -80,12 +92,19 @@ type endpointsCatalog struct {
 	} `json:"links"`
 }
 
-func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region string, eInterface string) string {
-	body := serviceGet(client, "endpoints")
+func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region string, eInterface string) (string, error) {
+	body, err := serviceGet(client, "endpoints")
+	if err != nil {
+		return "", errors.Wrap(err, "Could not get endpoints")
+	}
 	var c endpointsCatalog
-	err := json.Unmarshal(body, &c)
-	failOnError("Failed unmarshalling endpoint catalog: ", err)
-	serviceID := getServiceID(client, serviceType)
+	if err := json.Unmarshal(body, &c); err != nil {
+		return "", errors.Wrap(err, "Failed unmarshalling endpoint catalog")
+	}
+	serviceID, err := getServiceID(client, serviceType)
+	if err != nil {
+		return "", errors.Wrap(err, "Could not get serviceID")
+	}
 	var result []string
 	for _, endpoint := range c.Endpoints {
 		if endpoint.Region == region && endpoint.ServiceID == serviceID && endpoint.Interface == eInterface {
@@ -95,7 +114,7 @@ func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region s
 	if len(result) > 1 {
 		log.Fatal("Multiple endpoints available: ", result)
 	}
-	return result[0]
+	return result[0], nil
 }
 
 type projectsList struct {
@@ -107,10 +126,14 @@ type projectsList struct {
 	} `json:"projects"`
 }
 
-func getProjects(client *gophercloud.ServiceClient) projectsList {
-	body := serviceGet(client, "projects")
+func getProjects(client *gophercloud.ServiceClient) (projectsList, error) {
 	var c projectsList
-	err := json.Unmarshal(body, &c)
-	failOnError("Failed unmarshalling projects: ", err)
-	return c
+	body, err := serviceGet(client, "projects")
+	if err != nil {
+		return c, errors.Wrap(err, "Could not get projects")
+	}
+	if err := json.Unmarshal(body, &c); err != nil {
+		return c, errors.Wrap(err, "Failed unmarshalling projects")
+	}
+	return c, nil
 }

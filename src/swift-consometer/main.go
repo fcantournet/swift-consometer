@@ -188,7 +188,11 @@ func main() {
 	}
 
 	idClient := openstack.NewIdentityV3(provider)
-	pList := getProjects(idClient)
+	pList, err := getProjects(idClient)
+	if err != nil {
+		log.Fatal("Could not get projects: ", err)
+	}
+
 	projects := pList.Projects
 	log.Info(len(projects), " projects retrieved")
 	log.Debug(projects)
@@ -199,7 +203,10 @@ func main() {
 		go func(region string) {
 			defer wg.Done()
 			log.Info(fmt.Sprintf("[%s] Starting", region))
-			objectStoreURL := getEndpoint(idClient, "object-store", region, "admin")
+			objectStoreURL, err := getEndpoint(idClient, "object-store", region, "admin")
+			if err != nil {
+				log.Fatal("Could not get object store url: ", err)
+			}
 			log.Debug(fmt.Sprintf("[%s] Object store url: %s", region, objectStoreURL))
 
 			// Buffered chan can take all the answers
