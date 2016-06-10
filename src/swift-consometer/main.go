@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/pborman/uuid"
+	"github.com/pkg/errors"
 	"github.com/rackspace/gophercloud"
 	"github.com/rackspace/gophercloud/openstack"
 	"github.com/streadway/amqp"
@@ -32,12 +33,6 @@ type rabbitPayload struct {
 	Args struct {
 		Data []accountInfo `json:"data"`
 	} `json:"args"`
-}
-
-func failOnError(msg string, err error) {
-	if err != nil {
-		log.Fatal(msg, err)
-	}
 }
 
 func getAccountInfo(region, objectStoreURL, projectID string, results chan<- accountInfo, wga *sync.WaitGroup, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
@@ -96,17 +91,21 @@ func aggregateResponses(results <-chan accountInfo, chunkSize int) [][]accountIn
 	}
 }
 
-func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
+func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) error {
 	log.Debug("Connecting to: ", rabbit.URI)
 	conn, err := amqp.Dial(rabbit.URI)
-	failOnError("Failed to connect to RabbitMQ", err)
+	if err != nil {
+		return errors.Wrap(err, "Failed to connect to RabbitMQ")
+	}
 	defer conn.Close()
 	ch, err := conn.Channel()
-	failOnError("Failed to open channel", err)
+	if err != nil {
+		return errors.Wrap(err, "Failed to open channel")
+	}
 	defer ch.Close()
 
 	log.Debug("Checking existence or declaring exchange: ", rabbit.Exchange)
-	if err = ch.ExchangeDeclare(
+	if err := ch.ExchangeDeclare(
 		rabbit.Exchange, // name of the exchange
 		"topic",         // type
 		false,           // durable
@@ -115,7 +114,7 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 		false,           // noWait
 		nil,             // arguments
 	); err != nil {
-		log.Fatal("Failed declaring exchange: ", err)
+		return errors.Wrap(err, "Failed declaring exchange")
 	}
 
 	log.Debug("Checking existence or declaring queue: ", rabbit.Queue)
@@ -128,25 +127,25 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 		nil,          // arguments
 	)
 	if err != nil {
-		log.Fatal("Failed declaring queue: ", err)
+		return errors.Wrap(err, "Failed declaring queue")
 	}
 
 	log.Debug("Binding queue to exchange")
-	if err = ch.QueueBind(
+	if err := ch.QueueBind(
 		rabbit.Queue,      // name of the queue
 		rabbit.RoutingKey, // bindingKey
 		rabbit.Exchange,   // sourceExchange
 		false,             // noWait
 		nil,               // arguments
 	); err != nil {
-		log.Fatal("Failed binding queue: ", err)
+		return errors.Wrap(err, "Failed binding queue")
 	}
 
 	nbSent := 1
 	for _, rbMsg := range rbMsgs {
 		log.Debug("Sending ", nbSent, " out of ", len(rbMsgs), " message with ", len(rbMsg), "B length body")
 		log.Debug(string(rbMsg))
-		err = ch.Publish(
+		if err := ch.Publish(
 			rabbit.Exchange,   // exchange
 			rabbit.RoutingKey, // routing key
 			false,             // mandatory
@@ -154,11 +153,12 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) {
 			amqp.Publishing{
 				ContentType: "application/json",
 				Body:        []byte(rbMsg),
-			})
-		failOnError("Failed to publish message: ", err)
+			}); err != nil {
+			return errors.Wrap(err, "Failed to publish message")
+		}
 		nbSent++
 	}
-	return
+	return nil
 }
 
 func main() {
@@ -244,7 +244,9 @@ func main() {
 				rbMsgs = append(rbMsgs, rbMsg)
 			}
 			log.Info(fmt.Sprintf("[%s] Sending results to queue", region))
-			rabbitSend(rabbitCreds, rbMsgs)
+			if err := rabbitSend(rabbitCreds, rbMsgs); err != nil {
+				log.Fatal("Failed sending messages to rabbit", err)
+			}
 			log.Info(fmt.Sprintf("[%s] Done", region))
 		}(region)
 	}
