@@ -57,6 +57,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/pkg/errors",
+			"repository": "https://github.com/pkg/errors",
+			"revision": "a5b220e0c6228dbf18da147b648aa0d3387bc5d4",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/rackspace/gophercloud",
 			"repository": "https://github.com/rackspace/gophercloud",
 			"revision": "761cff8afb6a8e7f42c5554a90dae72f341bb481",
