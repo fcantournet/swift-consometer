@@ -112,7 +112,10 @@ func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region s
 		}
 	}
 	if len(result) > 1 {
-		log.Fatal("Multiple endpoints available: ", result)
+		return "", errors.New(fmt.Sprintf("Multiple endpoints available: %v", result))
+	}
+	if len(result) < 1 {
+		return "", errors.New(fmt.Sprintf("No endpoint for service %s in region %s", serviceType, region))
 	}
 	return result[0], nil
 }

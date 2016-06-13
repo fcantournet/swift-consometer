@@ -205,7 +205,7 @@ func main() {
 			log.Info(fmt.Sprintf("[%s] Starting", region))
 			objectStoreURL, err := getEndpoint(idClient, "object-store", region, "admin")
 			if err != nil {
-				log.Fatal("Could not get object store url: ", err)
+				log.Fatal("Could not get object-store url: ", err)
 			}
 			log.Debug(fmt.Sprintf("[%s] Object store url: %s", region, objectStoreURL))
 
