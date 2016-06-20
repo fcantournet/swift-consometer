@@ -29,13 +29,19 @@ type accountInfo struct {
 	Region           string  `json:"region"`             // "int5"
 }
 
+type failedAccountQuery struct {
+	ProjectID string
+	Error     error
+	Retry     int
+}
+
 type rabbitPayload struct {
 	Args struct {
 		Data []accountInfo `json:"data"`
 	} `json:"args"`
 }
 
-func getAccountInfo(region, objectStoreURL, projectID string, results chan<- accountInfo, wga *sync.WaitGroup, provider *gophercloud.ProviderClient, failedAccounts chan<- map[error]string) {
+func getAccountInfo(region, objectStoreURL, projectID string, results chan<- accountInfo, wga *sync.WaitGroup, provider *gophercloud.ProviderClient, failedAccountQueries chan<- failedAccountQuery) {
 	defer wga.Done()
 	accountURL := strings.Join([]string{objectStoreURL, "/v1/AUTH_", projectID}, "")
 	var maxRetries = 2
@@ -48,7 +54,10 @@ func getAccountInfo(region, objectStoreURL, projectID string, results chan<- acc
 				continue
 			} else {
 				log.Error(err)
-				failedAccounts <- map[error]string{err: projectID}
+				failedAccountQueries <- failedAccountQuery{
+					ProjectID: projectID,
+					Error:     err,
+					Retry:     i}
 				return
 			}
 		}
@@ -211,7 +220,7 @@ func main() {
 
 			// Buffered chan can take all the answers
 			results := make(chan accountInfo, len(projects))
-			failedAccounts := make(chan map[error]string, len(projects))
+			failedAccountQueries := make(chan failedAccountQuery, len(projects))
 
 			log.Debug(fmt.Sprintf("[%s] Launching jobs", region))
 			start := time.Now()
@@ -222,16 +231,16 @@ func main() {
 				if ticker > 0 {
 					<-time.Tick(time.Duration(ticker) * time.Millisecond)
 				}
-				go getAccountInfo(region, objectStoreURL, project.ID, results, &wga, provider, failedAccounts)
+				go getAccountInfo(region, objectStoreURL, project.ID, results, &wga, provider, failedAccountQueries)
 			}
 
 			wga.Wait()
 			close(results)
-			close(failedAccounts)
+			close(failedAccountQueries)
 
-			//failedAccounts channel may be more useful for error management in the future
-			if len(failedAccounts) > 0 {
-				log.Error(fmt.Sprintf("[%s] Number of accounts failed: %d", region, len(failedAccounts)))
+			//failedAccountQueries channel may be more useful for error management in the future
+			if len(failedAccountQueries) > 0 {
+				log.Error(fmt.Sprintf("[%s] Number of accounts failed: %d", region, len(failedAccountQueries)))
 			}
 			log.Info(fmt.Sprintf("[%s] %d Swift accounts fetched out of %d projects in %v", region, len(results), len(projects), time.Since(start)))
 
