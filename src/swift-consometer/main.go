@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/pborman/uuid"
 	"github.com/pkg/errors"
 	"github.com/rackspace/gophercloud"
 	"github.com/rackspace/gophercloud/openstack"
 	"github.com/streadway/amqp"
-	"strings"
-	"sync"
-	"time"
 )
 
 type accountInfo struct {

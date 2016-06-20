@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	"github.com/rackspace/gophercloud"
 	"github.com/spf13/viper"
-	"strings"
 )
 
 var log = logrus.New()

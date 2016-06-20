@@ -3,11 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/rackspace/gophercloud"
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/rackspace/gophercloud"
 )
 
 func serviceGet(client *gophercloud.ServiceClient, path string) ([]byte, error) {
