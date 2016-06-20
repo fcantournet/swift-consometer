@@ -24,7 +24,7 @@ func serviceGet(client *gophercloud.ServiceClient, path string) ([]byte, error) 
 		return []byte{}, errors.Wrap(err, "Request failed")
 	}
 	if status := resp.StatusCode; status != http.StatusOK {
-		return []byte{}, errors.New(fmt.Sprintf("Bad response status when getting %s (expecting 200 OK): %s", path, resp.Status))
+		return []byte{}, fmt.Errorf("Bad response status when getting %s (expecting 200 OK): %s", path, resp.Status)
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
@@ -68,7 +68,7 @@ func getServiceID(client *gophercloud.ServiceClient, serviceType string) (string
 		}
 	}
 	if len(result) > 1 {
-		return "", errors.New(fmt.Sprintf(" %v\nMultiple services available with same name", result))
+		return "", fmt.Errorf(" %v\nMultiple services available with same name", result)
 	}
 	return result[0], nil
 }
@@ -112,10 +112,10 @@ func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region s
 		}
 	}
 	if len(result) > 1 {
-		return "", errors.New(fmt.Sprintf("Multiple endpoints available: %v", result))
+		return "", fmt.Errorf("Multiple endpoints available: %v", result)
 	}
 	if len(result) < 1 {
-		return "", errors.New(fmt.Sprintf("No endpoint for service %s in region %s", serviceType, region))
+		return "", fmt.Errorf("No endpoint for service %s in region %s", serviceType, region)
 	}
 	return result[0], nil
 }

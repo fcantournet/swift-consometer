@@ -30,7 +30,7 @@ func checkConfigFile() error {
 
 	for _, key := range mandatoryKeys {
 		if !viper.IsSet(key) {
-			return errors.New(fmt.Sprintf("Incomplete configuration. Missing key %s", key))
+			return fmt.Errorf("Incomplete configuration. Missing key %s", key)
 		}
 	}
 	return nil
