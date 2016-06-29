@@ -223,7 +223,8 @@ func main() {
 			log.Info(fmt.Sprintf("[%s] Starting", region))
 			objectStoreURL, err := getEndpoint(idClient, "object-store", region, "admin")
 			if err != nil {
-				log.Fatal("Could not get object-store url: ", err)
+				log.Error(fmt.Sprintf("[%s] Could not get object-store url: %v", region, err))
+				return
 			}
 			log.Debug(fmt.Sprintf("[%s] Object store url: %s", region, objectStoreURL))
 
@@ -263,7 +264,8 @@ func main() {
 			}
 			log.Info(fmt.Sprintf("[%s] Sending results to queue", region))
 			if err := rabbitSend(rabbitCreds, rbMsgs); err != nil {
-				log.Fatal("Failed sending messages to rabbit", err)
+				log.Error(fmt.Sprintf("[%s] Failed sending messages to rabbit: %v", region, err))
+				return
 			}
 			log.Info(fmt.Sprintf("[%s] Done", region))
 		}(region)
