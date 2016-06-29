@@ -7,4 +7,4 @@ if [ -n "$1" ]
     mkdir $DEST_DIR
 fi
 cd src/swift-consometer
-GOPATH=$PROJECT_DIR/vendor:$PROJECT_DIR CGO_ENABLED=0 GOOS=linux go build -a -x -tags netgo -ldflags '-w' -o $PROJECT_DIR/$DEST_DIR/bin/swift-consometer .
+GOPATH=$PROJECT_DIR/vendor:$PROJECT_DIR CGO_ENABLED=0 GOOS=linux go build -a -x -tags netgo -ldflags "-X main.AppVersion=`git describe --tags`" -o $PROJECT_DIR/$DEST_DIR/bin/swift-consometer .

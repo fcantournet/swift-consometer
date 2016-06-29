@@ -2,7 +2,7 @@
  Swift-consometer
 ------------------
 The goal is to create a small agent that polls a swift cluster
-to measure the consumption of each Account in terms of the total 
+to measure the consumption of each Account in terms of the total
 volume of objects.
 
 This agent needs credentials with `ResellerAdmin` role

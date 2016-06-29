@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,8 @@ import (
 	"github.com/rackspace/gophercloud/openstack"
 	"github.com/streadway/amqp"
 )
+
+var AppVersion = "No version provided"
 
 type accountInfo struct {
 	CounterName      string  `json:"counter_name"`       //"storage.objects.size",
@@ -172,10 +175,15 @@ func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) error {
 }
 
 func main() {
-	log.Info("Starting...")
 	configPath := flag.String("config", "/etc/swift_consometer/", "Path of the configuration file directory.")
 	logLevel := flag.String("l", "", "Set log level info|debug|warn|error|panic. Default is info.")
+	version := flag.Bool("v", false, "Prints current swift-consometer version and exits.")
 	flag.Parse()
+
+	if *version {
+		fmt.Println(AppVersion)
+		os.Exit(0)
+	}
 
 	conf, err := readConfig(*configPath, *logLevel)
 	if err != nil {
@@ -262,5 +270,4 @@ func main() {
 	}
 	wg.Wait()
 	log.Info("Done")
-	return
 }
