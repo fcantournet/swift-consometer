@@ -1,0 +1,84 @@
+package: github.com/fcantournet/swift-consometer
+import:
+- package: github.com/BurntSushi/toml
+  version: 056c9bc7be7190eaa7715723883caffa5f8fa3e4
+  repo: https://github.com/BurntSushi/toml
+- package: github.com/Sirupsen/logrus
+  version: cdaedc68f2894175ac2b3221869685602c759e71
+  repo: https://github.com/Sirupsen/logrus
+- package: github.com/armon/consul-api
+  version: dcfedd50ed5334f96adee43fc88518a4f095e15c
+  repo: https://github.com/armon/consul-api
+- package: github.com/coreos/go-etcd
+  version: 003851be7bb0694fe3cc457a49529a19388ee7cf
+  repo: https://github.com/coreos/go-etcd
+  subpackages:
+  - etcd
+- package: github.com/kr/pretty
+  version: e6ac2fc51e89a3249e82157fa0bb7a18ef9dd5bb
+  repo: https://github.com/kr/pretty
+- package: github.com/kr/text
+  version: bb797dc4fb8320488f47bf11de07a733d7233e1f
+  repo: https://github.com/kr/text
+- package: github.com/magiconair/properties
+  version: 6ac0b95f449268951dd5c100682ea687a9866ea1
+  repo: https://github.com/magiconair/properties
+- package: github.com/mitchellh/mapstructure
+  version: 281073eb9eb092240d33ef253c404f1cca550309
+  repo: https://github.com/mitchellh/mapstructure
+- package: github.com/pborman/uuid
+  version: cccd189d45f7ac3368a0d127efb7f4d08ae0b655
+  repo: https://github.com/pborman/uuid
+- package: github.com/pkg/errors
+  version: a5b220e0c6228dbf18da147b648aa0d3387bc5d4
+  repo: https://github.com/pkg/errors
+- package: github.com/rackspace/gophercloud
+  version: 761cff8afb6a8e7f42c5554a90dae72f341bb481
+  repo: https://github.com/rackspace/gophercloud
+  subpackages:
+  - openstack
+- package: github.com/spf13/cast
+  version: ee815aaf958c707ad07547cd62150d973710f747
+  repo: https://github.com/spf13/cast
+- package: github.com/spf13/jwalterweatherman
+  version: c2aa07df593850a04644d77bb757d002e517a296
+  repo: https://github.com/spf13/jwalterweatherman
+- package: github.com/spf13/pflag
+  version: 08b1a584251b5b62f458943640fc8ebd4d50aaa5
+  repo: https://github.com/spf13/pflag
+- package: github.com/spf13/viper
+  version: e37b56e207dda4d79b9defe0548e960658ee8b6b
+  repo: https://github.com/spf13/viper
+- package: github.com/streadway/amqp
+  version: b4f3ceab0337f013208d31348b578d83c0064744
+  repo: https://github.com/streadway/amqp
+- package: github.com/ugorji/go
+  version: ea9cd21fa0bc41ee4bdd50ac7ed8cbc7ea2ed960
+  repo: https://github.com/ugorji/go
+  subpackages:
+  - codec
+- package: github.com/xordataexchange/crypt
+  version: 749e360c8f236773f28fc6d3ddfce4a470795227
+  repo: https://github.com/xordataexchange/crypt
+  subpackages:
+  - backend
+  - config
+  - encoding/secconf
+- package: golang.org/x/crypto
+  version: beef0f4390813b96e8e68fd78570396d0f4751fc
+  repo: https://go.googlesource.com/crypto
+  subpackages:
+  - cast5
+  - openpgp
+- package: gopkg.in/airbrake/gobrake.v2
+  version: e5efbe565a5a63d8aafee7efa2f4fdd7f42b7bd3
+  repo: https://gopkg.in/airbrake/gobrake.v2
+- package: gopkg.in/fsnotify.v1
+  version: 2cdd39bd6129c6a49c74fb07fb9d77ba1271c572
+  repo: https://gopkg.in/fsnotify.v1
+- package: gopkg.in/gemnasium/logrus-airbrake-hook.v2
+  version: 31e6fd4bd5a98d8ee7673d24bc54ec73c31810dd
+  repo: https://gopkg.in/gemnasium/logrus-airbrake-hook.v2
+- package: gopkg.in/yaml.v2
+  version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
+  repo: https://gopkg.in/yaml.v2
