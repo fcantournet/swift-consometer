@@ -206,12 +206,11 @@ func main() {
 	}
 
 	idClient := openstack.NewIdentityV3(provider)
-	pList, err := getProjects(idClient)
+	projects, err := getProjects(idClient)
 	if err != nil {
 		log.Fatal("Could not get projects: ", err)
 	}
 
-	projects := pList.Projects
 	log.Info(len(projects), " projects retrieved")
 	log.Debug(projects)
 

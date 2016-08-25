@@ -99,7 +99,7 @@ func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region s
 		return "", errors.Wrap(err, "Could not get endpoints")
 	}
 	var c endpointsCatalog
-	if err := json.Unmarshal(body, &c); err != nil {
+	if err = json.Unmarshal(body, &c); err != nil {
 		return "", errors.Wrap(err, "Failed unmarshalling endpoint catalog")
 	}
 	serviceID, err := getServiceID(client, serviceType)
@@ -121,23 +121,25 @@ func getEndpoint(client *gophercloud.ServiceClient, serviceType string, region s
 	return result[0], nil
 }
 
-type projectsList struct {
-	Projects []struct {
-		DomainID string `json:"domain_id"` //"default",
-		Enabled  bool   `json:"enabled"`   //true,
-		ID       string `json:"id"`        //"0c4e939acacf4376bdcd1129f1a054ad",
-		Name     string `json:"name"`      //"admin",
-	} `json:"projects"`
+type Project struct {
+	DomainID string `json:"domain_id"` //"default",
+	Enabled  bool   `json:"enabled"`   //true,
+	ID       string `json:"id"`        //"0c4e939acacf4376bdcd1129f1a054ad",
+	Name     string `json:"name"`      //"admin",
 }
 
-func getProjects(client *gophercloud.ServiceClient) (projectsList, error) {
+type projectsList struct {
+	Projects []Project `json:"projects"`
+}
+
+func getProjects(client *gophercloud.ServiceClient) ([]Project, error) {
 	var c projectsList
 	body, err := serviceGet(client, "projects")
 	if err != nil {
-		return c, errors.Wrap(err, "Could not get projects")
+		return c.Projects, errors.Wrap(err, "Could not get projects")
 	}
 	if err := json.Unmarshal(body, &c); err != nil {
-		return c, errors.Wrap(err, "Failed unmarshalling projects")
+		return c.Projects, errors.Wrap(err, "Failed unmarshalling projects")
 	}
-	return c, nil
+	return c.Projects, nil
 }
