@@ -59,7 +59,7 @@ func (f Frame) Format(s fmt.State, verb rune) {
 				io.WriteString(s, "unknown")
 			} else {
 				file, _ := fn.FileLine(pc)
-				io.WriteString(s, trimGOPATH(fn.Name(), file))
+				fmt.Fprintf(s, "%s\n\t%s", fn.Name(), file)
 			}
 		default:
 			io.WriteString(s, path.Base(f.file()))
@@ -76,15 +76,17 @@ func (f Frame) Format(s fmt.State, verb rune) {
 	}
 }
 
-// Stacktrace is stack of Frames from innermost (newest) to outermost (oldest).
-type Stacktrace []Frame
+// StackTrace is stack of Frames from innermost (newest) to outermost (oldest).
+type StackTrace []Frame
 
-func (st Stacktrace) Format(s fmt.State, verb rune) {
+func (st StackTrace) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'v':
 		switch {
 		case s.Flag('+'):
-			fmt.Fprintf(s, "%+v", []Frame(st))
+			for _, f := range st {
+				fmt.Fprintf(s, "\n%+v", f)
+			}
 		case s.Flag('#'):
 			fmt.Fprintf(s, "%#v", []Frame(st))
 		default:
@@ -98,7 +100,20 @@ func (st Stacktrace) Format(s fmt.State, verb rune) {
 // stack represents a stack of program counters.
 type stack []uintptr
 
-func (s *stack) Stacktrace() Stacktrace {
+func (s *stack) Format(st fmt.State, verb rune) {
+	switch verb {
+	case 'v':
+		switch {
+		case st.Flag('+'):
+			for _, pc := range *s {
+				f := Frame(pc)
+				fmt.Fprintf(st, "\n%+v", f)
+			}
+		}
+	}
+}
+
+func (s *stack) StackTrace() StackTrace {
 	f := make([]Frame, len(*s))
 	for i := 0; i < len(f); i++ {
 		f[i] = Frame((*s)[i])

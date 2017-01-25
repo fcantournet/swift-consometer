@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/pkg/errors"
-	"github.com/rackspace/gophercloud"
 )
 
 func serviceGet(client *gophercloud.ServiceClient, path string) ([]byte, error) {

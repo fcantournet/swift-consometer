@@ -1,24 +1,77 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"strconv"
 	"strings"
-	"sync"
+	"syscall"
 	"time"
 
+	_ "net/http/pprof"
+	"sync"
+
+	"net/http"
+
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/marpaia/graphite-golang"
 	"github.com/pborman/uuid"
 	"github.com/pkg/errors"
-	"github.com/rackspace/gophercloud"
-	"github.com/rackspace/gophercloud/openstack"
-	"github.com/streadway/amqp"
 )
+
+// This is the share of time dedicated to each stage of the pipeline.
+// We use this to calculate the timeout for each stage based on global timeout.
+const (
+	tsSwift    = 10
+	tsRabbitMQ = 3
+	tsReport   = 1
+	tsSum      = tsSwift + tsRabbitMQ + tsReport + 1 // = 15
+)
+
+type RegionPollConfig struct {
+	timeout        time.Duration
+	objectStoreUrl string
+	region         string
+	workers        int
+	rabbit         rabbitCreds
+}
 
 var AppVersion = "No version provided"
 
-type accountInfo struct {
+type RegionReport struct {
+	// TopAccounts [5]AccountInfo
+	TotalConso         int64
+	RunDuration        time.Duration
+	PolledSuccessfully int
+	Polled             int
+	Projects           int
+	Published          int
+	Region             string
+}
+
+func (r RegionReport) Publish(gf *graphite.Graphite) {
+	gf.SimpleSend(fmt.Sprintf("%v.published", r.Region), fmt.Sprintf("%d", r.Published))
+	gf.SimpleSend(fmt.Sprintf("%v.polledsuccessfully", r.Region), fmt.Sprintf("%d", r.PolledSuccessfully))
+	gf.SimpleSend(fmt.Sprintf("%v.polled", r.Region), fmt.Sprintf("%d", r.Polled))
+	gf.SimpleSend(fmt.Sprintf("%v.projects", r.Region), fmt.Sprintf("%d", r.Projects))
+	gf.SimpleSend(fmt.Sprintf("%v.runduration", r.Region), fmt.Sprintf("%d", int(r.RunDuration.Seconds())))
+	// We publish total consumption only if we actually managed to poll stuff.
+	// TODO: this sucks actually ...
+	if float32(r.PolledSuccessfully)/float32(r.Projects) > 0.99 {
+		gf.SimpleSend(fmt.Sprintf("%v.totalconso", r.Region), fmt.Sprintf("%d", r.TotalConso))
+	}
+}
+
+type AccountResult struct {
+	ai  AccountInfo
+	err error
+}
+
+type AccountInfo struct {
 	CounterName      string  `json:"counter_name"`       //"storage.objects.size",
 	ResourceID       string  `json:"resource_id"`        //"d5bbc7c06c9e479dbb91912c045cdeab",
 	MessageID        string  `json:"message_id"`         //"1",
@@ -33,149 +86,196 @@ type accountInfo struct {
 	Region           string  `json:"region"`             // "int5"
 }
 
-type failedAccountQuery struct {
-	ProjectID string
-	Error     error
-	Retry     int
+func ReduceAccounts(cfg *RegionPollConfig, in <-chan AccountResult) (RegionReport, error) {
+	chunksize := 200
+	rr := RegionReport{Region: cfg.region}
+
+	var chunkedAccounts [][]AccountInfo
+	var allAccounts []AccountInfo
+	for ar := range in {
+		rr.Polled++
+		if ar.err == nil {
+			rr.PolledSuccessfully++
+			conso, err := strconv.ParseInt(ar.ai.CounterVolume, 10, 64)
+			if err == nil {
+				rr.TotalConso += conso
+			}
+		}
+		allAccounts = append(allAccounts, ar.ai)
+	}
+
+	log.Debug("Got all polled accounts")
+	fits := len(allAccounts) / chunksize
+	for i := 0; i < fits; i++ {
+		chunkedAccounts = append(chunkedAccounts, allAccounts[i*chunksize:(i+1)*chunksize])
+	}
+	chunkedAccounts = append(chunkedAccounts, allAccounts[fits*chunksize:])
+
+	if len(chunkedAccounts) == 0 {
+		return rr, fmt.Errorf("nothing to publish to rabbitMQ")
+	}
+
+	publishChan, confirmChan, err := setupRabbit(cfg.rabbit)
+	if err != nil {
+		return rr, errors.Wrap(err, "cannot setupRabbit")
+	}
+	// publishChan, confirmChan, _ := fakeSetupRabbit()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout*tsRabbitMQ/tsSum)
+	go func() {
+		defer close(publishChan)
+		defer cancel()
+		for _, a := range chunkedAccounts {
+			select {
+			case <-ctx.Done():
+				return
+			case publishChan <- a:
+			}
+		}
+	}()
+
+	for published := range confirmChan {
+		rr.Published += published
+	}
+	return rr, nil
 }
 
-type rabbitPayload struct {
-	Args struct {
-		Data []accountInfo `json:"data"`
-	} `json:"args"`
-}
-
-func getAccountInfo(region, objectStoreURL, projectID string, results chan<- accountInfo, wga *sync.WaitGroup, provider *gophercloud.ProviderClient, failedAccountQueries chan<- failedAccountQuery) {
-	defer wga.Done()
-	accountURL := strings.Join([]string{objectStoreURL, "/v1/AUTH_", projectID}, "")
-	var maxRetries = 2
-	for i := 0; i <= maxRetries; i++ {
-		resp, err := provider.Request("HEAD", accountURL, gophercloud.RequestOpts{OkCodes: []int{204, 200}})
+func pollProject(objectStoreURL, region string, project Project, provider *gophercloud.ProviderClient) (AccountInfo, error) {
+	accountURL := strings.Join([]string{objectStoreURL, "/v1/AUTH_", project.ID}, "")
+	retry := true
+	for retry {
+		resp, err := provider.Request("HEAD", accountURL, &gophercloud.RequestOpts{OkCodes: []int{204, 200}})
 		if err != nil {
-			if i < maxRetries {
-				log.Debug(err, " Retry ", i+1)
-				<-time.Tick(1000 * time.Millisecond)
+			if retry {
+				retry = false
+				log.Debug(err, " Retrying")
+				<-time.Tick(100 * time.Millisecond)
 				continue
 			} else {
 				log.Error(err)
-				failedAccountQueries <- failedAccountQuery{
-					ProjectID: projectID,
-					Error:     err,
-					Retry:     i}
-				return
+				return AccountInfo{}, err
 			}
 		}
-		log.Debug("Fetching account: ", accountURL)
-		ai := accountInfo{
+		log.Debug("Fetched account: ", accountURL)
+		ai := AccountInfo{
 			CounterName:      "storage.objects.size",
-			ResourceID:       projectID,
+			ResourceID:       project.ID,
 			MessageID:        uuid.New(),
 			Timestamp:        time.Now().Format(time.RFC3339),
 			CounterVolume:    resp.Header.Get("x-account-bytes-used"),
 			UserID:           nil,
 			Source:           "openstack",
 			CounterUnit:      "B",
-			ProjectID:        projectID,
+			ProjectID:        project.ID,
 			CounterType:      "gauge",
 			ResourceMetadata: nil,
 			Region:           region,
 		}
-		results <- ai
-		return
+		return ai, nil
+	}
+	return AccountInfo{}, nil
+}
+
+// PollWorker is a goroutine that polls swift for projects from chann Project. Exits on context.Done()
+func PollWorker(wg *sync.WaitGroup, objectStoreURL, region string, in <-chan Project,
+	provider *gophercloud.ProviderClient, out chan AccountResult) {
+
+	defer wg.Done()
+	//var errors int
+	for project := range in {
+		ai, err := pollProject(objectStoreURL, region, project, provider)
+		out <- AccountResult{ai, err}
 	}
 }
 
-func aggregateResponses(results <-chan accountInfo, chunkSize int) [][]accountInfo {
-	var r [][]accountInfo
-	for {
-		if len(results) <= chunkSize {
-			var s []accountInfo
-			for result := range results {
-				s = append(s, result)
+// PollRegion polls a region. should run in its own goroutine
+func PollRegion(cfg *RegionPollConfig, projects []Project, provider *gophercloud.ProviderClient) (RegionReport, error) {
+
+	projChann := make(chan Project)
+	accountResultChann := make(chan AccountResult, len(projects))
+
+	var wg sync.WaitGroup
+	for i := 0; i < cfg.workers; i++ {
+		wg.Add(1)
+		go PollWorker(&wg, cfg.objectStoreUrl, cfg.region, projChann, provider, accountResultChann)
+	}
+
+	ctxSwift, cancel := context.WithTimeout(context.Background(), cfg.timeout*tsSwift/tsSum)
+	go func() {
+		defer close(projChann)
+		defer cancel()
+		for _, p := range projects {
+			select {
+			case <-ctxSwift.Done():
+				return
+			case projChann <- p:
 			}
-			r = append(r, s)
-			return r
 		}
-		var s []accountInfo
-		for i := 0; i < chunkSize; i++ {
-			s = append(s, <-results)
-		}
-		r = append(r, s)
-	}
+	}()
+
+	go func() {
+		// Wait for all workers to finish. If context is canceled, Workers will exit and this will pass.
+		wg.Wait()
+		close(accountResultChann) // Then we close this chan to terminate the publishing.
+	}()
+
+	rr, err := ReduceAccounts(cfg, accountResultChann)
+
+	return rr, err
+
 }
 
-func rabbitSend(rabbit rabbitCreds, rbMsgs [][]byte) error {
-	log.Debug("Connecting to: ", rabbit.URI)
-	conn, err := amqp.Dial(rabbit.URI)
+func runOnce(conf config) {
+	start := time.Now()
+
+	provider, err := openstack.AuthenticatedClient(conf.Credentials.Openstack.AuthOptions)
 	if err != nil {
-		return errors.Wrap(err, "Failed to connect to RabbitMQ")
+		log.Fatalf("Failed creating provider: %v", err)
 	}
-	defer conn.Close()
-	ch, err := conn.Channel()
+
+	idClient, err := openstack.NewIdentityV3(provider, gophercloud.EndpointOpts{})
 	if err != nil {
-		return errors.Wrap(err, "Failed to open channel")
+		log.Fatalf("cannot get identity client: %v", err)
 	}
-	defer ch.Close()
-
-	log.Debug("Checking existence or declaring exchange: ", rabbit.Exchange)
-	if err := ch.ExchangeDeclare(
-		rabbit.Exchange, // name of the exchange
-		"topic",         // type
-		false,           // durable
-		false,           // delete when complete
-		false,           // internal
-		false,           // noWait
-		nil,             // arguments
-	); err != nil {
-		return errors.Wrap(err, "Failed declaring exchange")
-	}
-
-	log.Debug("Checking existence or declaring queue: ", rabbit.Queue)
-	_, err = ch.QueueDeclare(
-		rabbit.Queue, // name of the queue
-		true,         // durable
-		false,        // delete when usused
-		false,        // exclusive
-		false,        // noWait
-		nil,          // arguments
-	)
+	projects, err := getProjects(idClient)
 	if err != nil {
-		return errors.Wrap(err, "Failed declaring queue")
+		log.Fatalf("Could not get projects: %v", err)
 	}
 
-	log.Debug("Binding queue to exchange")
-	if err := ch.QueueBind(
-		rabbit.Queue,      // name of the queue
-		rabbit.RoutingKey, // bindingKey
-		rabbit.Exchange,   // sourceExchange
-		false,             // noWait
-		nil,               // arguments
-	); err != nil {
-		return errors.Wrap(err, "Failed binding queue")
+	log.Info(len(projects), " projects retrieved")
+
+	objectStoreURL, err := getEndpoint(idClient, "object-store", conf.Region, "admin")
+	if err != nil {
+		log.Fatalf("cannot get swift endpoint for region: %v", conf.Region)
 	}
 
-	nbSent := 1
-	for _, rbMsg := range rbMsgs {
-		log.Debug("Sending ", nbSent, " out of ", len(rbMsgs), " message with ", len(rbMsg), "B length body")
-		log.Debug(string(rbMsg))
-		if err := ch.Publish(
-			rabbit.Exchange,   // exchange
-			rabbit.RoutingKey, // routing key
-			false,             // mandatory
-			false,             // immediate
-			amqp.Publishing{
-				ContentType: "application/json",
-				Body:        []byte(rbMsg),
-			}); err != nil {
-			return errors.Wrap(err, "Failed to publish message")
-		}
-		nbSent++
+	cfg := RegionPollConfig{
+		objectStoreUrl: objectStoreURL,
+		timeout:        conf.Timeout,
+		region:         conf.Region,
+		workers:        conf.Workers,
+		rabbit:         conf.Credentials.Rabbit,
 	}
-	return nil
+
+	report, err := PollRegion(&cfg, projects, provider)
+	if err != nil {
+		log.Errorf("cannot publish result: %v", err)
+	}
+
+	report.RunDuration = time.Since(start)
+	report.Projects = len(projects)
+	// graphiteClient, err := graphite.NewGraphiteUDP(conf.Graphite.Hostname, conf.Graphite.Port)
+	// if err != nil {
+	// 	log.Errorf("cannot connect to graphite with hostname: %v port: %v", conf.Graphite.Hostname, conf.Graphite.Port)
+	graphiteClient := graphite.NewGraphiteNop(conf.Graphite.Hostname, conf.Graphite.Port)
+	// }
+
+	graphiteClient.Prefix = conf.Graphite.Prefix
+	report.Publish(graphiteClient)
 }
 
 func main() {
-	configPath := flag.String("config", "/etc/swift_consometer/", "Path of the configuration file directory.")
+	configPath := flag.String("config", "/etc/swift-consometer/", "Path of the configuration file directory.")
 	logLevel := flag.String("l", "", "Set log level info|debug|warn|error|panic. Default is info.")
 	version := flag.Bool("v", false, "Prints current swift-consometer version and exits.")
 	flag.Parse()
@@ -187,88 +287,23 @@ func main() {
 
 	conf, err := readConfig(*configPath, *logLevel)
 	if err != nil {
-		log.Fatal("Failed reading configuration: ", err)
+		log.Fatalf("Failed reading configuration: %v", err)
 	}
 
-	regions := conf.Regions
-	opts := conf.Credentials.Openstack.AuthOptions
-	rabbitCreds := conf.Credentials.Rabbit
-	ticker := conf.Ticker
+	go http.ListenAndServe(":8080", http.DefaultServeMux)
 
-	go func() {
-		time.Sleep(1800 * time.Second)
-		log.Fatal("Timeout")
-	}()
+	ticker := time.Tick(conf.Timeout)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 
-	provider, err := openstack.AuthenticatedClient(opts)
-	if err != nil {
-		log.Fatal("Failed creating provider: ", err)
+	// This works around the fact that tickers start after one full interval.
+	go runOnce(conf)
+	for {
+		select {
+		case <-ticker:
+			go runOnce(conf)
+		case <-sig:
+			os.Exit(1)
+		}
 	}
-
-	idClient := openstack.NewIdentityV3(provider)
-	projects, err := getProjects(idClient)
-	if err != nil {
-		log.Fatal("Could not get projects: ", err)
-	}
-
-	log.Info(len(projects), " projects retrieved")
-	log.Debug(projects)
-
-	var wg sync.WaitGroup
-	wg.Add(len(regions))
-	for _, region := range regions {
-		go func(region string) {
-			defer wg.Done()
-			log.Info(fmt.Sprintf("[%s] Starting", region))
-			objectStoreURL, err := getEndpoint(idClient, "object-store", region, "admin")
-			if err != nil {
-				log.Error(fmt.Sprintf("[%s] Could not get object-store url: %v", region, err))
-				return
-			}
-			log.Debug(fmt.Sprintf("[%s] Object store url: %s", region, objectStoreURL))
-
-			// Buffered chan can take all the answers
-			results := make(chan accountInfo, len(projects))
-			failedAccountQueries := make(chan failedAccountQuery, len(projects))
-
-			log.Debug(fmt.Sprintf("[%s] Launching jobs", region))
-			start := time.Now()
-
-			var wga sync.WaitGroup
-			wga.Add(len(projects))
-			for _, project := range projects {
-				if ticker > 0 {
-					<-time.Tick(time.Duration(ticker) * time.Millisecond)
-				}
-				go getAccountInfo(region, objectStoreURL, project.ID, results, &wga, provider, failedAccountQueries)
-			}
-
-			wga.Wait()
-			close(results)
-			close(failedAccountQueries)
-
-			//failedAccountQueries channel may be more useful for error management in the future
-			if len(failedAccountQueries) > 0 {
-				log.Error(fmt.Sprintf("[%s] Number of accounts failed: %d", region, len(failedAccountQueries)))
-			}
-			log.Info(fmt.Sprintf("[%s] %d Swift accounts fetched out of %d projects in %v", region, len(results), len(projects), time.Since(start)))
-
-			respList := aggregateResponses(results, 200) //Chunks of 200 accounts, roughly 100KB per message
-			var rbMsgs [][]byte
-			for _, chunk := range respList {
-				output := rabbitPayload{}
-				output.Args.Data = chunk
-				rbMsg, _ := json.Marshal(output)
-				rbMsgs = append(rbMsgs, rbMsg)
-			}
-			log.Info(fmt.Sprintf("[%s] Sending results to queue", region))
-			if err := rabbitSend(rabbitCreds, rbMsgs); err != nil {
-				log.Error(fmt.Sprintf("[%s] Failed sending messages to rabbit: %v", region, err))
-				return
-			}
-			log.Info(fmt.Sprintf("[%s] Done", region))
-		}(region)
-	}
-	wg.Wait()
-	log.Info("Done")
 }

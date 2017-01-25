@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	"time"
+
 	"github.com/Sirupsen/logrus"
+	"github.com/gophercloud/gophercloud"
 	"github.com/pkg/errors"
-	"github.com/rackspace/gophercloud"
 	"github.com/spf13/viper"
 )
 
@@ -25,8 +27,9 @@ func checkConfigFile() error {
 		"credentials.rabbit.routing_key",
 		"credentials.rabbit.vhost",
 		"credentials.rabbit.queue",
-		"regions",
-		"ticker",
+		"timeout",
+		"region",
+		"workers",
 		"log_level"}
 
 	for _, key := range mandatoryKeys {
@@ -55,8 +58,14 @@ type config struct {
 			AuthOptions gophercloud.AuthOptions
 		}
 	}
-	Regions  []string
-	Ticker   int
+	Graphite struct {
+		Port     int
+		Hostname string
+		Prefix   string
+	}
+	Region   string
+	Timeout  time.Duration
+	Workers  int
 	LogLevel string
 }
 
@@ -72,7 +81,9 @@ func readConfig(configPath string, logLevel string) (config, error) {
 		return conf, errors.Wrap(err, "Check config file failed")
 	}
 
-	conf.Regions = viper.GetStringSlice("regions")
+	conf.Timeout = viper.GetDuration("timeout")
+
+	conf.Region = viper.GetString("region")
 
 	opts := gophercloud.AuthOptions{
 		IdentityEndpoint: viper.GetString("credentials.openstack.keystone_uri"),
@@ -95,7 +106,7 @@ func readConfig(configPath string, logLevel string) (config, error) {
 	rabbit.URI = strings.Join([]string{"amqp://", rabbit.User, ":", rabbit.Password, "@", rabbit.Host, "/", rabbit.Vhost}, "")
 	conf.Credentials.Rabbit = rabbit
 
-	conf.Ticker = viper.GetInt("ticker")
+	conf.Workers = viper.GetInt("workers")
 
 	conf.LogLevel = viper.GetString("log_level")
 	if logLevel != "" {
