@@ -18,7 +18,7 @@ node('dockerHost_int0'){
 
   stage 'build'
   withCredentials([[$class: 'StringBinding', credentialsId: 'd6b8e14d-b18e-46e2-bec5-81c11ced1517', variable: 'NEXUS_DEPLOYMENT_PASSWORD']]) {
-    sh 'make docker-publish'
+    sh 'make publish-in-docker'
   }
 
   stage 'build docker'
