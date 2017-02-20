@@ -1,6 +1,6 @@
 project=swift-consometer
 build_docker_image=r.cwpriv.net/jenkins/golang-builder:1.7-latest
-version=$(shell git describe --tags)
+version=$(shell git describe --abbrev=1 --tags)
 release_dir=/tmp/release/swift-consometer
 
 all: ${project}
@@ -23,3 +23,7 @@ publish-in-docker:
 
 publish: release
 	nexus-upload ${release_dir}.tar.gz com/cloudwatt/swift ${project} ${version} tar.gz
+
+print-%:
+	@echo '$($*)'
+
