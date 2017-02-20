@@ -1,20 +1,22 @@
 {{ $openstack_region := env "openstack_region" -}}
-{{ $openstackcreds := secret "secret/openstack/users/swift-consometer" -}}
-{{ $rabbitmqcreds := secret "secret/rabbitmq/users/swift-consometer" -}}
 {{ $catalog := key (printf "/config/openstack/catalog/%s/data" $openstack_region) | parseJSON -}}
 
 
 credentials:
   openstack: #The user must have the role ResellerAdmin
     keystone_uri: {{ with $catalog.identity.admin_url }}{{ . | replaceAll "/v2.0" "" }}{{ end }} #Admin endpoint without version
-    swift_conso_tenant: "{{ $openstackcreds.Data.project }}"
+    {{ with secret "secret/openstack/users/swift-consometer" -}}
+    swift_conso_tenant: "{{ .Data.project }}"
     swift_conso_user: "swift-consometer"
-    swift_conso_password: "{{ $openstackcreds.Data.password }}"
+    swift_conso_password: "{{ .Data.password }}"
+    {{- end}}
     swift_conso_domain: "default"
   rabbit:
-    host: "d-msqcld-0000.usr.int5.aub.cloudwatt.net:5672"
-    user: "{{ $rabbitmqcreds.Data.username }}"
-    password: "{{ $rabbitmqcreds.Data.password }}"
+    host: "swift_consometer-queue"
+    {{ with secret "secret/rabbitmq/users/swift-consometer" -}}
+    user: "{{ .Data.username }}"
+    password: "{{ .Data.password }}"
+    {{- end }}
     vhost: "openstack"
     exchange: "swift-consometer"
     routing_key: "metering"
