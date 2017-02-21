@@ -5,22 +5,22 @@
 credentials:
   openstack: #The user must have the role ResellerAdmin
     keystone_uri: {{ with $catalog.identity.admin_url }}{{ . | replaceAll "/v2.0" "" }}{{ end }} #Admin endpoint without version
-    {{ with secret "secret/openstack/users/swift-consometer" -}}
+    {{ with secret "secret/openstack/users/swift_consometer" -}}
     swift_conso_tenant: "{{ .Data.project }}"
-    swift_conso_user: "swift-consometer"
+    swift_conso_user: "swift_consometer"
     swift_conso_password: "{{ .Data.password }}"
     {{- end}}
     swift_conso_domain: "default"
   rabbit:
     host: "swift_consometer-queue"
-    {{ with secret "secret/rabbitmq/users/swift-consometer" -}}
+    {{ with secret "secret/rabbitmq/users/swift_consometer" -}}
     user: "{{ .Data.username }}"
     password: "{{ .Data.password }}"
     {{- end }}
     vhost: "openstack"
-    exchange: "swift-consometer"
+    exchange: "swift_consometer"
     routing_key: "metering"
-    queue: "swift-consometer"
+    queue: "processor.collector"
 region: {{ env "SWIFT_REGION" }}
 timeout: {{ env "PERIOD" }}
 workers: {{ env "WORKERS" }}
