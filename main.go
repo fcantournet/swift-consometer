@@ -266,14 +266,12 @@ func runOnce(conf config) {
 	report.RunDuration = time.Since(start)
 	report.Projects = len(projects)
 
-	log.Infof("Run Completed in %t. Successfully Polled %v out of %v accounts. Published %d", report.RunDuration, report.PolledSuccessfully, report.Projects, report.Published)
-	graphiteClient, err := graphite.NewGraphiteUDP(conf.Graphite.Hostname, conf.Graphite.Port)
+	log.Infof("Run Completed in %v. Successfully Polled %v out of %v accounts. Published %d", report.RunDuration.String(), report.PolledSuccessfully, report.Projects, report.Published)
+	graphiteClient, err := graphite.NewGraphiteWithMetricPrefix(conf.Graphite.Hostname, conf.Graphite.Port, conf.Graphite.Prefix)
 	if err != nil {
 		log.Errorf("cannot connect to graphite with hostname: %v port: %v", conf.Graphite.Hostname, conf.Graphite.Port)
 		graphiteClient = graphite.NewGraphiteNop(conf.Graphite.Hostname, conf.Graphite.Port)
 	}
-
-	graphiteClient.Prefix = conf.Graphite.Prefix
 	report.Publish(graphiteClient)
 }
 
