@@ -264,11 +264,11 @@ func runOnce(conf config) {
 
 	report.RunDuration = time.Since(start)
 	report.Projects = len(projects)
-	// graphiteClient, err := graphite.NewGraphiteUDP(conf.Graphite.Hostname, conf.Graphite.Port)
-	// if err != nil {
-	// 	log.Errorf("cannot connect to graphite with hostname: %v port: %v", conf.Graphite.Hostname, conf.Graphite.Port)
-	graphiteClient := graphite.NewGraphiteNop(conf.Graphite.Hostname, conf.Graphite.Port)
-	// }
+	graphiteClient, err := graphite.NewGraphiteUDP(conf.Graphite.Hostname, conf.Graphite.Port)
+	if err != nil {
+		log.Errorf("cannot connect to graphite with hostname: %v port: %v", conf.Graphite.Hostname, conf.Graphite.Port)
+		graphiteClient = graphite.NewGraphiteNop(conf.Graphite.Hostname, conf.Graphite.Port)
+	}
 
 	graphiteClient.Prefix = conf.Graphite.Prefix
 	report.Publish(graphiteClient)

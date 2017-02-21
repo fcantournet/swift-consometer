@@ -12,7 +12,7 @@ credentials:
     {{- end}}
     swift_conso_domain: "default"
   rabbit:
-    host: "swift_consometer-queue"
+    host: "swift_consometer-queue.service"
     {{ with secret "secret/rabbitmq/users/swift_consometer" -}}
     user: "{{ .Data.username }}"
     password: "{{ .Data.password }}"

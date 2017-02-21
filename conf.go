@@ -108,6 +108,10 @@ func readConfig(configPath string, logLevel string) (config, error) {
 
 	conf.Workers = viper.GetInt("workers")
 
+	conf.Graphite.Hostname = "graphite-relay.localdomain"
+	conf.Graphite.Port = 2003
+	conf.Graphite.Prefix = "swift-consometer"
+
 	conf.LogLevel = viper.GetString("log_level")
 	if logLevel != "" {
 		parsedLogLevel, err := logrus.ParseLevel(logLevel)
