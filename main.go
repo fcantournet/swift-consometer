@@ -104,7 +104,7 @@ func ReduceAccounts(cfg *RegionPollConfig, in <-chan AccountResult) (RegionRepor
 		allAccounts = append(allAccounts, ar.ai)
 	}
 
-	log.Debug("Got all polled accounts")
+	log.Infof("Polled %d accounts successfully our of %d", rr.PolledSuccessfully, rr.Polled)
 	fits := len(allAccounts) / chunksize
 	for i := 0; i < fits; i++ {
 		chunkedAccounts = append(chunkedAccounts, allAccounts[i*chunksize:(i+1)*chunksize])
@@ -137,6 +137,7 @@ func ReduceAccounts(cfg *RegionPollConfig, in <-chan AccountResult) (RegionRepor
 	for published := range confirmChan {
 		rr.Published += published
 	}
+	log.Infof("published %d accounts out of %d polled successfully", rr.Published, rr.Polled)
 	return rr, nil
 }
 
@@ -264,6 +265,8 @@ func runOnce(conf config) {
 
 	report.RunDuration = time.Since(start)
 	report.Projects = len(projects)
+
+	log.Infof("Run Completed in %t. Successfully Polled %v out of %v accounts. Published %d", report.RunDuration, report.PolledSuccessfully, report.Projects, report.Published)
 	graphiteClient, err := graphite.NewGraphiteUDP(conf.Graphite.Hostname, conf.Graphite.Port)
 	if err != nil {
 		log.Errorf("cannot connect to graphite with hostname: %v port: %v", conf.Graphite.Hostname, conf.Graphite.Port)
