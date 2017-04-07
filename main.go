@@ -144,13 +144,13 @@ func ReduceAccounts(cfg *RegionPollConfig, in <-chan AccountResult) (RegionRepor
 func pollProject(objectStoreURL, region string, project Project, provider *gophercloud.ProviderClient) (AccountInfo, error) {
 	accountURL := strings.Join([]string{objectStoreURL, "/v1/AUTH_", project.ID}, "")
 	retry := true
-	for retry {
+	for {
 		resp, err := provider.Request("HEAD", accountURL, &gophercloud.RequestOpts{OkCodes: []int{204, 200}})
 		if err != nil {
 			if retry {
 				retry = false
 				log.Debug(err, " Retrying")
-				<-time.Tick(100 * time.Millisecond)
+				<-time.Tick(200 * time.Millisecond)
 				continue
 			} else {
 				log.Error(err)
