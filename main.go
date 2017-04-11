@@ -100,8 +100,8 @@ func ReduceAccounts(cfg *RegionPollConfig, in <-chan AccountResult) (RegionRepor
 			if err == nil {
 				rr.TotalConso += conso
 			}
+			allAccounts = append(allAccounts, ar.ai)
 		}
-		allAccounts = append(allAccounts, ar.ai)
 	}
 
 	log.Infof("Polled %d accounts successfully our of %d", rr.PolledSuccessfully, rr.Polled)
@@ -174,7 +174,6 @@ func pollProject(objectStoreURL, region string, project Project, provider *gophe
 		}
 		return ai, nil
 	}
-	return AccountInfo{}, nil
 }
 
 // PollWorker is a goroutine that polls swift for projects from chann Project. Exits on context.Done()
