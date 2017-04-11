@@ -157,6 +157,7 @@ func pollProject(objectStoreURL, region string, project Project, provider *gophe
 				return AccountInfo{}, err
 			}
 		}
+		defer resp.Body.Close()
 		log.Debug("Fetched account: ", accountURL)
 		ai := AccountInfo{
 			CounterName:      "storage.objects.size",
