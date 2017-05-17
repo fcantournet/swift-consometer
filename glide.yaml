@@ -1,0 +1,14 @@
+package: github.com/fcantournet/swift-consometer
+import:
+- package: github.com/Sirupsen/logrus
+  version: ^0.11.0
+- package: github.com/marpaia/graphite-golang
+- package: github.com/pborman/uuid
+  version: ^1.0.0
+- package: github.com/pkg/errors
+  version: ^0.8.0
+- package: github.com/gophercloud/gophercloud
+  subpackages:
+  - openstack
+- package: github.com/spf13/viper
+- package: github.com/streadway/amqp
