@@ -150,7 +150,7 @@ func pollProject(objectStoreURL, region string, project Project, provider *gophe
 			if retry {
 				retry = false
 				log.Debug(err, " Retrying")
-				<-time.Tick(200 * time.Millisecond)
+				<-time.After(200 * time.Millisecond)
 				continue
 			} else {
 				log.Error(err)
