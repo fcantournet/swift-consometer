@@ -7,8 +7,9 @@ all: ${project}
 
 ${project}: build
 
-build:
-	go install ${project}
+build-in-docker:
+	docker run --rm -w /go/src/swift-consometer -v $(shell pwd):/go/src/swift-consometer \
+		${build_docker_image} go build -o swift-consometer
 
 release:
 	CGO_ENABLED=0 GOOS=linux go build -a -x -tags netgo -ldflags "-X main.AppVersion=${version}" -o ${release_dir}/${project} .
