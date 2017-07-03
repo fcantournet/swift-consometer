@@ -40,6 +40,9 @@ The service publishes graphite metrics for its own performance and monitoring (d
 and for the swift capacity planning
 
 
-# TODO : 
+# TODO :
 We might want to build alerting based either on metrics published in graphite (like success rate)
 or based on probe in kubernetes
+
+We might want to create a custom role in keystone for this to avoid giving ResellerAdmin priviledge to this app.
+This new role would need to be configured in swift as `reseller_admin_role` in proxy config.
